@@ -75,6 +75,10 @@ pub struct BevyUiBtnColorblind;
 #[derive(Component)]
 pub struct BevyUiMinimapRoot;
 
+/// Marker for the floating zoom / accessibility toolbar overlay.
+#[derive(Component)]
+pub struct BevyUiFloatingToolbarRoot;
+
 #[derive(Resource, Default)]
 pub struct EditorAccessibilitySettings {
     pub colorblind_mode: bool,
@@ -97,6 +101,7 @@ pub fn setup_bevy_ui_hud(
 
     // 1. Floating Toolbar with Zoom Controls & Colorblind Toggle (Center-Bottom)
     let mut toolbar_cmd = commands.spawn((
+        BevyUiFloatingToolbarRoot,
         Button,
         GlobalZIndex(220),
         Node {

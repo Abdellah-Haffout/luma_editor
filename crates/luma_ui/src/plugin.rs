@@ -44,7 +44,7 @@ use crate::wires::{
     draw_canvas_wires_system, interactive_pin_wiring_system, sync_luma_connections_system,
     update_luma_connections_system, update_luma_ghost_connection_system,
 };
-use crate::{UiButton as Button, UiInteraction as Interaction};
+use crate::UiInteraction as Interaction;
 use bevy::prelude::*;
 use bevy_luma::prelude::*;
 
@@ -82,6 +82,7 @@ impl Plugin for LumaUiPlugin {
             jackdaw_feathers::icons::IconFontPlugin,
             jackdaw_widgets::EditorWidgetsPlugins,
             jackdaw_panels::DockPlugin,
+            crate::dock_layout::EditorDockLayoutPlugin,
             crate::web_image::WebImagePlugin,
             UiMaterialPlugin::<LumaConnectionMaterial>::default(),
         ))
@@ -103,8 +104,9 @@ impl Plugin for LumaUiPlugin {
                     setup_bevy_ui_inspector,
                     setup_bevy_ui_settings,
                     setup_bevy_ui_menu_dropdowns,
-                    setup_jackdaw_dock_panels,
+                    crate::dock_layout::setup_editor_dock_layout,
                 ),
+                crate::dock_layout::attach_overlay_dock_anchors,
             )
                 .chain(),
         )
@@ -184,80 +186,65 @@ impl Plugin for LumaUiPlugin {
 
 /// Updates `EditorCanvasInputGuard` every frame before any canvas or node-graph system runs.
 /// Blocks all node-graph interactions whenever:
-/// 1. The mouse cursor is outside the window or not on the canvas grid.
+/// 1. The mouse cursor is outside the window or outside the Node Editor dock area.
 /// 2. A modal or popup menu is active (Settings modal, Top Menu dropdown, or Add Node palette).
-/// 3. The mouse cursor is hovering or pressing any UI panel, button, dock, inspector, or toolbar.
+/// 3. The mouse cursor is hovering or pressing any UI button / overlay.
+///
+/// While a mouse button is held, the decision taken on press is latched, so dragging a dock
+/// gap or a tab across the canvas never starts a box-selection, and a canvas pan/drag that
+/// leaves the Node Editor area keeps working until the button is released.
 pub fn update_canvas_input_guard_system(
     mut guard: ResMut<EditorCanvasInputGuard>,
     windows: Query<&Window>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     settings_state: Res<EditorSettingsState>,
     menu_state: Res<EditorMenuState>,
     palette_q: Query<&Node, With<crate::bevy_ui_hud::BevyUiSpawnPalette>>,
-    inspector_q: Query<&Node, With<crate::bevy_ui_inspector::BevyUiInspectorRoot>>,
+    viewport_rect: Res<crate::dock_layout::NodeEditorViewportRect>,
+    dock_drag: Option<Res<jackdaw_panels::drag::DockDragState>>,
     ui_interactions: Query<&Interaction>,
+    mut press_latch: Local<Option<bool>>,
 ) {
-    let window = match windows.iter().next() {
-        Some(w) => w,
-        None => {
-            guard.is_blocked = true;
-            return;
-        }
-    };
-
-    // 1. Cursor must be inside the window
-    let pos = match window.cursor_position() {
-        Some(p) => p,
-        None => {
-            guard.is_blocked = true;
-            return;
-        }
-    };
-
-    // 2. Block when any modal/menu/palette has focus
-    let is_palette_open = palette_q
-        .iter()
-        .any(|n| n.display == Display::Flex);
-    if settings_state.is_open || menu_state.open_menu.is_some() || is_palette_open {
+    // Modals / menus always win.
+    let is_palette_open = palette_q.iter().any(|n| n.display == Display::Flex);
+    let dock_dragging = dock_drag
+        .as_deref()
+        .is_some_and(|d| !matches!(d, jackdaw_panels::drag::DockDragState::Idle));
+    if settings_state.is_open || menu_state.open_menu.is_some() || is_palette_open || dock_dragging {
         guard.is_blocked = true;
         return;
     }
 
-    // 3. Block when any UI element/panel has Hovered or Pressed interaction
-    if ui_interactions.iter().any(|i| *i != Interaction::None) {
-        guard.is_blocked = true;
-        return;
+    let raw_blocked = (|| {
+        let Some(window) = windows.iter().next() else {
+            return true;
+        };
+        let Some(pos) = window.cursor_position() else {
+            return true;
+        };
+        // Cursor must be inside the visible Node Editor area.
+        let Some(rect) = viewport_rect.0 else {
+            return true;
+        };
+        if !rect.contains(pos) {
+            return true;
+        }
+        // Any hovered / pressed UI overlay (toolbar, minimap, inspector ...) blocks the canvas.
+        ui_interactions.iter().any(|i| *i != Interaction::None)
+    })();
+
+    let any_pressed = mouse_buttons.get_pressed().next().is_some();
+    if mouse_buttons.get_just_pressed().next().is_some() && press_latch.is_none() {
+        *press_latch = Some(raw_blocked);
+    }
+    if !any_pressed {
+        *press_latch = None;
     }
 
-    // 4. Geometric bounds check for all fixed/docked UI panels so cursor is strictly on the canvas grid
-    let w = window.width();
-    let h = window.height();
-
-    // Top header & toolbar chrome or bottom status bar
-    let in_top_or_bottom = pos.y <= 68.0 || pos.y >= (h - 44.0);
-    // Left dock panel (Wire Shapes / Graph Outliner at x: 12..272, y: 64..294)
-    let in_left_dock = pos.x >= 12.0 && pos.x <= 272.0 && pos.y >= 64.0 && pos.y <= 294.0;
-    // Right inspector panel (when visible, at right: 16, width: 290, top: 72..792)
-    let is_inspector_open = inspector_q
-        .iter()
-        .any(|n| n.display == Display::Flex);
-    let in_right_inspector =
-        is_inspector_open && pos.x >= (w - 306.0) && pos.y >= 72.0 && pos.y <= 792.0;
-    // Center-bottom floating zoom toolbar
-    let in_floating_toolbar = pos.x >= (w * 0.5 - 140.0)
-        && pos.x <= (w * 0.5 + 140.0)
-        && pos.y >= (h - 82.0)
-        && pos.y <= (h - 50.0);
-    // Bottom-right minimap
-    let in_minimap = pos.x >= (w - 136.0) && pos.y >= (h - 122.0) && pos.y <= (h - 50.0);
-    // Bottom-left hotkeys HUD
-    let in_hotkeys_hud = pos.x >= 16.0 && pos.x <= 326.0 && pos.y >= (h - 82.0) && pos.y <= (h - 50.0);
-
-    guard.is_blocked = in_top_or_bottom
-        || in_left_dock
-        || in_right_inspector
-        || in_floating_toolbar
-        || in_minimap
-        || in_hotkeys_hud;
+    guard.is_blocked = match *press_latch {
+        Some(latched) if any_pressed => latched,
+        _ => raw_blocked,
+    };
 }
 
 /// Spawns and despawns physical in-world 2D node cards to match the nodes in EditorGraphResource.
@@ -1044,142 +1031,5 @@ pub fn update_node_io_values_system(
                 text.text = target;
             }
         }
-    }
-}
-
-/// Sets up a live `jackdaw_panels` dockable sidebar (`DockTreeHost` + `WindowRegistry` + `DockTree`)
-/// featuring a Wire Shapes selector tab and a `jackdaw_widgets::tree_view::TreeView` Graph Outliner tab.
-pub fn setup_jackdaw_dock_panels(
-    mut commands: Commands,
-    ui_cam_query: Query<Entity, With<EditorUiCamera>>,
-    mut registry: ResMut<jackdaw_panels::WindowRegistry>,
-    mut dock_tree: ResMut<jackdaw_panels::tree::DockTree>,
-) {
-    registry.register(jackdaw_panels::DockWindowDescriptor {
-        id: "wires".into(),
-        name: "Wire Shapes".into(),
-        icon: Some(String::from(jackdaw_feathers::icons::Icon::Workflow.unicode())),
-        default_area: "left_dock".into(),
-        priority: 10,
-        build: std::sync::Arc::new(|parent| {
-            parent
-                .spawn((
-                    Node {
-                        width: Val::Percent(100.0),
-                        padding: UiRect::all(Val::Px(jackdaw_feathers::tokens::SPACING_MD)),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(jackdaw_feathers::tokens::SPACING_SM),
-                        ..default()
-                    },
-                ))
-                .with_children(|col| {
-                    for style in luma_canvas::wiring::WireRoutingStyle::ALL {
-                        col.spawn((
-                            crate::bevy_ui_settings::BevyUiWireStyleBtn(style),
-                            Button,
-                            Node {
-                                width: Val::Percent(100.0),
-                                height: Val::Px(26.0),
-                                padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
-                                border_radius: BorderRadius::all(Val::Px(
-                                    jackdaw_feathers::tokens::BORDER_RADIUS_SM,
-                                )),
-                                border: UiRect::ZERO,
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(jackdaw_feathers::tokens::TOOLBAR_BUTTON_BG),
-                            BorderColor::all(Color::NONE),
-                            children![(
-                                crate::bevy_ui_settings::BevyUiWireStyleBtn(style),
-                                Text::new(format!("{} — {}", style.label(), style.description())),
-                                TextFont {
-                                    font_size: jackdaw_feathers::tokens::TEXT_SIZE_SM,
-                                    ..default()
-                                },
-                                TextColor(jackdaw_feathers::tokens::TEXT_PRIMARY),
-                            )],
-                        ));
-                    }
-                });
-        }),
-    });
-
-    registry.register(jackdaw_panels::DockWindowDescriptor {
-        id: "outliner".into(),
-        name: "Graph Outliner".into(),
-        icon: Some(String::from(jackdaw_feathers::icons::Icon::ListTree.unicode())),
-        default_area: "left_dock".into(),
-        priority: 20,
-        build: std::sync::Arc::new(|parent| {
-            parent
-                .spawn((
-                    jackdaw_widgets::tree_view::TreeRoot,
-                    Node {
-                        width: Val::Percent(100.0),
-                        padding: UiRect::all(Val::Px(jackdaw_feathers::tokens::SPACING_SM)),
-                        flex_direction: FlexDirection::Column,
-                        row_gap: Val::Px(2.0),
-                        ..default()
-                    },
-                ))
-                .with_children(|tree| {
-                    tree.spawn((
-                        jackdaw_widgets::tree_view::TreeRowContent,
-                        Node {
-                            width: Val::Percent(100.0),
-                            height: Val::Px(jackdaw_feathers::tokens::FIELD_ROW_HEIGHT),
-                            padding: UiRect::horizontal(Val::Px(8.0)),
-                            border_radius: BorderRadius::all(Val::Px(
-                                jackdaw_feathers::tokens::BORDER_RADIUS_SM,
-                            )),
-                            border: UiRect::ZERO,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
-                        BackgroundColor(Color::NONE),
-                        children![(
-                            jackdaw_widgets::tree_view::TreeRowLabel,
-                            Text::new("Root Graph"),
-                            TextFont {
-                                font_size: jackdaw_feathers::tokens::TEXT_SIZE_SM,
-                                ..default()
-                            },
-                            TextColor(jackdaw_feathers::tokens::TEXT_SECONDARY),
-                        )],
-                    ));
-                });
-        }),
-    });
-
-    dock_tree.set_root_leaf(
-        jackdaw_panels::tree::DockLeaf::new(
-            "left_dock",
-            jackdaw_panels::DockAreaStyle::TabBar,
-        )
-        .with_windows(vec!["wires".into(), "outliner".into()])
-        .persistent(),
-    );
-
-    let ui_cam = ui_cam_query.iter().next();
-    let mut host_cmd = commands.spawn((
-        jackdaw_panels::reconcile::DockTreeHost::default(),
-        Button,
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Px(12.0),
-            top: Val::Px(64.0),
-            width: Val::Px(260.0),
-            height: Val::Px(230.0),
-            border_radius: BorderRadius::all(Val::Px(jackdaw_feathers::tokens::BORDER_RADIUS_LG)),
-            border: UiRect::ZERO,
-            overflow: Overflow::clip(),
-            ..default()
-        },
-        BackgroundColor(jackdaw_feathers::tokens::PANEL_BG),
-        GlobalZIndex(12),
-    ));
-    if let Some(cam) = ui_cam {
-        host_cmd.insert(UiTargetCamera(cam));
     }
 }

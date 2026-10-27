@@ -6,6 +6,7 @@ pub mod bevy_ui_inspector;
 pub mod bevy_ui_settings;
 pub mod components;
 pub mod connection_material;
+pub mod dock_layout;
 pub mod jackdaw_widgets;
 pub mod layout;
 pub mod menu_bar;
@@ -37,6 +38,7 @@ pub use components::{
     focus_toolbar::*, header::*, node_card::*, status_bar::*,
 };
 pub use connection_material::*;
+pub use dock_layout::*;
 pub use luma_node_macro::{luma_body_node, luma_node, luma_system, LumaResource};
 pub use inventory;
 pub use jackdaw_widgets::*;

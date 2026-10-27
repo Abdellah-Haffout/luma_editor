@@ -91,7 +91,8 @@ pub fn setup_bevy_ui_chrome(
             justify_content: JustifyContent::SpaceBetween,
             align_items: AlignItems::Center,
             border: UiRect::ZERO,
-            border_radius: BorderRadius::bottom(Val::Px(12.0)),
+            // Flush with the dock areas below (Blender-style top bar).
+            border_radius: BorderRadius::ZERO,
             ..default()
         },
         BackgroundColor(EditorTheme::WINDOW_BG),
@@ -162,15 +163,29 @@ pub fn setup_bevy_ui_chrome(
                 ));
             });
 
-        // Center: Central Document Tab & Ghost Action Buttons (Zero border, clean Figma styling)
+        // Center: Blender-Style Workspace Tabs, Document Tab & Action Buttons
         parent
             .spawn(Node {
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
-                column_gap: Val::Px(4.0),
+                column_gap: Val::Px(6.0),
                 ..default()
             })
             .with_children(|center| {
+                // Blender-Style Workspace Tabs (Jackdaw WorkspaceTabStrip)
+                center.spawn((
+                    jackdaw_panels::WorkspaceTabStrip,
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(2.0),
+                        height: Val::Px(24.0),
+                        ..default()
+                    },
+                ));
+
+                spawn_separator(center, SeparatorProps::vertical());
+
                 // Active document tab pill (Jackdaw document tab strip spec)
                 center
                     .spawn((
@@ -743,7 +758,8 @@ pub fn ensure_ui_camera_target_system(
                 With<BevyUiStatusBarRoot>,
                 With<BevyUiFocusToolbarRoot>,
                 With<crate::bevy_ui_settings::BevyUiSettingsRoot>,
-            )>, 
+                With<crate::dock_layout::EditorDockRoot>,
+            )>,
         ),
     >,
     mut commands: Commands,
