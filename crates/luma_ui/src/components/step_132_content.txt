@@ -1,0 +1,32 @@
+Created At: 2026-10-16T23:00:36Z
+Completed At: 2026-10-16T23:00:36Z
+
+The command exited with code 0.
+Output:
+    let custom_slot_h = if is_custom_slot { 24.0 } else { 0.0 };
+    let custom_slot_border_w = if is_custom_slot { 1.0 } else { 0.0 };
+    let custom_slot_border_col = if is_custom_slot { Color::srgba(1.0, 1.0, 1.0, 0.12) } else { Color::NONE };
+    let custom_slot_bg = if is_custom_slot { Color::srgba(0.08, 0.09, 0.10, 0.60) } else { Color::NONE };
+
+    bsn! {
+        NodeCardRoot { node_id }
+        NodeCardVisual { node_id }
+        Transform::from_xyz(pos_x, pos_y, 0.0)
+        // 1. Dark charcoal Blender card container (corner radius 8px, #222428)
+        UNode {
+            width: UVal::Px(width_px),
+            height: UVal::Px(height_px),
+            background_color: Color::srgba(0.133, 0.141, 0.157, 0.98),
+            border_radius: UCornerRadius::all(corner_radius),
+        }
+        // 1px subtle dark border at #161719
+        UBorder {
+            color: Color::srgba(0.086, 0.090, 0.102, 0.95),
+            width: 1.0,
+            radius: UCornerRadius::all(corner_radius),
+        }
+        ULayout {
+            display: UDisplay::Flex,
+            flex_direction: UFlexDirection::Column,
+        }
+

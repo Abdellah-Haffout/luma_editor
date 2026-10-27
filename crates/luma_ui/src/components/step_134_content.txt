@@ -1,0 +1,19 @@
+Created At: 2026-10-16T23:00:44Z
+Completed At: 2026-10-16T23:00:44Z
+The following changes were made by the replace_file_content tool to: /home/abdellah/Univis-project/luma_editor/src/ui/components/node_card.rs. If relevant, proactively run terminal commands to execute this code for the USER. Don't ask for permission.
+[diff_block_start]
+@@ -5,9 +5,10 @@
+ use bevy::prelude::*;
+ use bevy_luma::prelude::*;
+ 
+-#[derive(Component, Clone, Copy, PartialEq, Eq, Default)]
++#[derive(Component, Clone, Copy, PartialEq, Debug, Default)]
+ pub struct NodeCardVisual {
+     pub node_id: NodeId,
++    pub type_color: Color,
+ }
+ 
+ #[derive(Component, Clone, Copy, PartialEq, Eq, Default)]
+[diff_block_end]
+
+Please note that the above snippet only shows the MODIFIED lines from the last change. It shows up to 3 lines of unchanged lines before and after the modified lines. The actual file contents may have many more lines not shown.

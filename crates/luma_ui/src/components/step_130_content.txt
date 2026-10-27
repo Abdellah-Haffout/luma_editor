@@ -1,0 +1,31 @@
+Created At: 2026-10-16T23:00:22Z
+Completed At: 2026-10-16T23:00:22Z
+
+The command exited with code 0.
+Output:
+use crate::core::id::{NodeId, PinId};
+use crate::dataflow::descriptor::NodeBodyStyle;
+use crate::nodes::card::NodeCardLayout;
+use crate::ui::theme::EditorTheme;
+use bevy::prelude::*;
+use bevy_luma::prelude::*;
+
+#[derive(Component, Clone, Copy, PartialEq, Eq, Default)]
+pub struct NodeCardVisual {
+    pub node_id: NodeId,
+}
+
+#[derive(Component, Clone, Copy, PartialEq, Eq, Default)]
+pub struct NodeCardRoot {
+    pub node_id: NodeId,
+}
+
+#[derive(Component, Clone, Copy, PartialEq, Eq, Default)]
+pub struct DiveInButton {
+    pub node_id: NodeId,
+}
+
+/// Interactive value display label for parameter nodes (e.g. math.number).
+#[derive(Component, Clone, Copy, PartialEq, Eq, Default)]
+pub struct NodeParamValueText {
+

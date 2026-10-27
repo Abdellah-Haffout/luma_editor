@@ -1,0 +1,209 @@
+(
+    version: 1,
+    meta: (
+        author: "User",
+        created_at_sec: 1792651696,
+        editor_version: "0.1.0",
+    ),
+    canvas: (
+        pan: (0.0, 0.0),
+        zoom: 1.0,
+        min_zoom: 0.1,
+        max_zoom: 5.0,
+    ),
+    graph: (
+        nodes: {
+            (2): (
+                id: (2),
+                title: "Add",
+                kind: "math.add",
+                position: (-200.0, 40.0),
+                size: (190.0, 94.0),
+                inputs: [
+                    (3),
+                    (4),
+                ],
+                outputs: [
+                    (5),
+                ],
+                is_collapsed: false,
+                subgraph: None,
+            ),
+            (4): (
+                id: (4),
+                title: "Sine",
+                kind: "math.sin",
+                position: (360.0, 40.0),
+                size: (190.0, 70.0),
+                inputs: [
+                    (9),
+                ],
+                outputs: [
+                    (10),
+                ],
+                is_collapsed: false,
+                subgraph: None,
+            ),
+            (1): (
+                id: (1),
+                title: "Number",
+                kind: "math.number",
+                position: (-480.0, 40.0),
+                size: (190.0, 70.0),
+                inputs: [
+                    (1),
+                ],
+                outputs: [
+                    (2),
+                ],
+                is_collapsed: false,
+                subgraph: None,
+            ),
+            (3): (
+                id: (3),
+                title: "Multiply",
+                kind: "math.multiply",
+                position: (121.36837, 67.62061),
+                size: (190.0, 94.0),
+                inputs: [
+                    (6),
+                    (7),
+                ],
+                outputs: [
+                    (8),
+                ],
+                is_collapsed: false,
+                subgraph: None,
+            ),
+        },
+        pins: {
+            (3): (
+                id: (3),
+                node_id: (2),
+                name: "a",
+                direction: Input,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Single,
+            ),
+            (6): (
+                id: (6),
+                node_id: (3),
+                name: "a",
+                direction: Input,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Single,
+            ),
+            (7): (
+                id: (7),
+                node_id: (3),
+                name: "b",
+                direction: Input,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Single,
+            ),
+            (8): (
+                id: (8),
+                node_id: (3),
+                name: "result",
+                direction: Output,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Multiple,
+            ),
+            (4): (
+                id: (4),
+                node_id: (2),
+                name: "b",
+                direction: Input,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Single,
+            ),
+            (2): (
+                id: (2),
+                node_id: (1),
+                name: "output",
+                direction: Output,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Multiple,
+            ),
+            (10): (
+                id: (10),
+                node_id: (4),
+                name: "result",
+                direction: Output,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Multiple,
+            ),
+            (1): (
+                id: (1),
+                node_id: (1),
+                name: "value",
+                direction: Input,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Single,
+            ),
+            (9): (
+                id: (9),
+                node_id: (4),
+                name: "angle_rad",
+                direction: Input,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Single,
+            ),
+            (5): (
+                id: (5),
+                node_id: (2),
+                name: "result",
+                direction: Output,
+                data_type: (
+                    name: "Float",
+                ),
+                capacity: Multiple,
+            ),
+        },
+        connections: {
+            (3): (
+                id: (3),
+                source_node: (3),
+                source_pin: (8),
+                target_node: (4),
+                target_pin: (9),
+            ),
+            (5): (
+                id: (5),
+                source_node: (2),
+                source_pin: (5),
+                target_node: (3),
+                target_pin: (6),
+            ),
+            (1): (
+                id: (1),
+                source_node: (1),
+                source_pin: (2),
+                target_node: (2),
+                target_pin: (3),
+            ),
+        },
+    ),
+    domain_assets: [],
+    domain_meshes: [],
+    domain_materials: [],
+    domain_entities: [],
+)

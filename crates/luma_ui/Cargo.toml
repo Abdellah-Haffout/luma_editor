@@ -1,0 +1,24 @@
+[package]
+name = "luma_ui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+luma_core.workspace = true
+luma_dataflow.workspace = true
+luma_domain.workspace = true
+luma_commands.workspace = true
+luma_canvas.workspace = true
+bevy.workspace = true
+bevy_luma.workspace = true
+serde.workspace = true
+ron.workspace = true
+thiserror.workspace = true
+glam.workspace = true
+jackdaw_widgets.workspace = true
+jackdaw_panels.workspace = true
+jackdaw_feathers.workspace = true
+ureq.workspace = true
+image.workspace = true
+inventory.workspace = true
+luma_node_macro.workspace = true

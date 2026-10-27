@@ -1,0 +1,10 @@
+[package]
+name = "luma_domain"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+luma_core.workspace = true
+bevy.workspace = true
+serde.workspace = true
+glam.workspace = true

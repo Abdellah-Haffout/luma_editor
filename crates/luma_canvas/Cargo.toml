@@ -1,0 +1,15 @@
+[package]
+name = "luma_canvas"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+luma_core.workspace = true
+luma_dataflow.workspace = true
+luma_domain.workspace = true
+luma_commands.workspace = true
+bevy.workspace = true
+serde.workspace = true
+ron.workspace = true
+thiserror.workspace = true
+glam.workspace = true

@@ -1,0 +1,68 @@
+Created At: 2026-10-18T13:36:52Z
+Completed At: 2026-10-18T13:36:52Z
+File Path: `file:///home/abdellah/Univis-project/luma_editor/src/ui/components/node_card.rs`
+Total Lines: 997
+Total Bytes: 47151
+Showing lines 61 to 120
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+61:     pub pin_id: Option<PinId>,
+62: }
+63: 
+64: /// Maps data type name to authentic Blender socket type colors.
+65: pub fn get_blender_pin_color(type_name: &str) -> Color {
+66:     match type_name {
+67:         "Float" | "f32" | "Number" => Color::srgb(0.65, 0.65, 0.65),    // Silver / Gray (Float)
+68:         "Int" | "Integer" => Color::srgb(0.35, 0.68, 0.78),             // Cyan (Integer)
+69:         "Vec2" | "Vec3" | "Vec4" | "Vector" | "Float3" => Color::srgb(0.39, 0.39, 0.78), // Blue/Indigo (Vector)
+70:         "Color" | "RGBA" => Color::srgb(0.78, 0.78, 0.16),              // Yellow (Color)
+71:         "String" => Color::srgb(0.55, 0.75, 0.95),                      // Light Blue (String)
+72:         "Shader" | "Material" => Color::srgb(0.39, 0.78, 0.39),         // Green (Shader/Material)
+73:         "Geometry" | "Mesh" => Color::srgb(0.0, 0.84, 0.64),            // Emerald/Teal (Geometry)
+74:         "Entity" | "Object" => Color::srgb(0.90, 0.54, 0.18),           // Orange (Object/Entity)
+75:         "Asset" | "AssetRef" | "Model" => Color::srgb(1.0, 0.69, 0.12), // Amber (Asset)
+76:         "Bool" | "Boolean" => Color::srgb(0.85, 0.40, 0.60),            // Pink (Boolean)
+77:         _ => Color::srgb(0.80, 0.80, 0.80),                             // Untyped / Any
+78:     }
+79: }
+80: 
+81: /// Spawns a physical in-world 2D node card (`URootUi::world_2d`) using BSN with Blender aesthetics.
+82: /// 
+83: /// Refinements:
+84: /// - Pure Blender aesthetic: sleek dark charcoal container, rounded 8px corners.
+85: /// - Rounded colored header with category tint, semibold white title, and indicator dot.
+86: /// - Ports/Sockets implemented 100% in bevy_luma (ZERO Gizmos):
+87: ///   - 10px circular dots positioned directly on card boundaries (half inside, half outside).
+88: ///   - Solid fill in type color when connected.
+89: ///   - 2px colored ring with dark card interior when unconnected.
+90: /// - Compact 3-column layout (Inputs | Center Parameter Slot | Outputs).
+91: pub fn node_card_scene(
+92:     font: Handle<Font>,
+93:     layout: &NodeCardLayout,
+94:     _is_selected: bool,
+95: ) -> impl Scene {
+96:     let node_id = layout.node_id;
+97:     let title = layout.title.clone();
+98:     let is_subgraph = layout.kind == "Subgraph";
+99: 
+100:     let width_px = layout.size.x;
+101:     let height_px = layout.size.y;
+102:     let corner_radius = 8.0;
+103:     let header_height = 32.0;
+104:     let row_height = 26.0;
+105: 
+106:     let header_bg = layout.header_bg;
+107:     let kind_badge = layout.category_tag.clone();
+108: 
+109:     let pos_x = layout.position.x;
+110:     let pos_y = layout.position.y;
+111: 
+112:     // Helper to extract pin meta (existence, pin_id, color, connection status)
+113:     let get_pin_meta = |pins: &[crate::core::graph::Pin], idx: usize| -> (bool, Option<PinId>, Color, bool) {
+114:         if let Some(pin) = pins.get(idx) {
+115:             let is_connected = layout.is_pin_connected(pin.id);
+116:             let color = get_blender_pin_color(&pin.data_type.name);
+117:             (true, Some(pin.id), color, is_connected)
+118:         } else {
+119:             (false, None, Color::NONE, false)
+120:         }
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

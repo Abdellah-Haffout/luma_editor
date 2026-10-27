@@ -1,0 +1,1 @@
+Initialize type_color in NodeCardVisual inside node_card_scene
