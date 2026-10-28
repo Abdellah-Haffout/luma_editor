@@ -1,8 +1,8 @@
 //! Blender-Style Shading Workspace Example:
 //!
-//! Declarative, macro-driven node architecture based on `node_editor_showcase`:
+//! Powered by `bevy_luma_widgets`:
 //! - Pure functions as nodes via `#[luma_node]`.
-//! - Interactive widgets via `#[luma_body_node(system = ...)]`.
+//! - Interactive widgets powered by `bevy_luma_widgets` (LumaButton, LumaSwatch, LumaBadge).
 //! - Zero `.register_node(...)` calls in `main()`.
 //! - Pure 2-panel Blender dock layout (3D Viewport on left, Shader Editor on right).
 //!
@@ -19,6 +19,7 @@ use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::render::render_resource::TextureFormat;
 use bevy_luma::prelude::*;
+use bevy_luma_widgets::prelude::*;
 use jackdaw_feathers::{icons::Icon, tokens};
 use jackdaw_panels::tree::{DockLeaf, DockNode, DockSplit, DockTree, SplitAxis};
 use jackdaw_panels::{
@@ -40,7 +41,7 @@ const SHADER_PREVIEW_LAYER: usize = 1;
 // 1. Pure Function Nodes (Auto-Registered via #[luma_node])
 // =============================================================================
 
-/// Principled BSDF shader node implemented as a clean, declarative Rust function.
+/// Principled BSDF shader node implemented as a declarative Rust function.
 /// All input pins and default parameters are declared directly in the signature.
 #[luma_node(
     kind = "shader.principled_bsdf",
@@ -59,7 +60,7 @@ pub fn principled_bsdf(
 }
 
 // =============================================================================
-// 2. Interactive UI Body Nodes (Auto-Registered via #[luma_body_node])
+// 2. Interactive UI Body Nodes Powered by `bevy_luma_widgets`
 // =============================================================================
 
 #[derive(Component)]
@@ -77,7 +78,7 @@ struct BtnSetVal {
 #[derive(Component)]
 struct WaveOscillatorMarker(NodeId);
 
-/// Interactive Color Palette node with 5 one-click presets.
+/// Interactive Color Palette node utilizing `LumaSwatch` from `bevy_luma_widgets`.
 #[luma_body_node(system = sync_color_palette_system)]
 pub struct ColorPaletteNode;
 
@@ -95,7 +96,7 @@ impl LumaNode for ColorPaletteNode {
     }
 
     fn style(&self) -> NodeStyle {
-        NodeStyle::header_rgb(0.62, 0.45, 0.16).width(220.0)
+        NodeStyle::header_rgb(0.62, 0.45, 0.16).width(230.0)
     }
 
     fn outputs(&self) -> Vec<PinInfo> {
@@ -108,7 +109,6 @@ impl LumaNode for ColorPaletteNode {
 
     fn show_body(&self, ctx: &mut NodeBodyContext) {
         let node_id = ctx.node_id();
-        let font = ctx.font();
 
         let row = ctx
             .spawn((
@@ -116,57 +116,58 @@ impl LumaNode for ColorPaletteNode {
                     width: UVal::Percent(1.0),
                     height: UVal::Px(28.0),
                     padding: USides::axes(4.0, 2.0),
-                    background_color: Color::srgb(0.10, 0.11, 0.14),
-                    border_radius: UCornerRadius::all(4.0),
+                    background_color: Color::srgb(0.08, 0.09, 0.12),
+                    border_radius: UCornerRadius::all(6.0),
                     ..default()
                 },
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Row,
                     align_items: UAlignItems::Center,
-                    gap: 5.0,
+                    justify_content: UJustifyContent::SpaceEvenly,
+                    gap: 6.0,
                     ..default()
                 },
             ))
             .id();
 
         let presets = [
-            ("Gold", LinearColor::new(1.00, 0.76, 0.33, 1.0)),
-            ("Cyan", LinearColor::new(0.18, 0.85, 0.98, 1.0)),
-            ("Ruby", LinearColor::new(0.95, 0.18, 0.30, 1.0)),
-            ("Lime", LinearColor::new(0.15, 0.88, 0.48, 1.0)),
-            ("Silk", LinearColor::new(0.88, 0.90, 0.95, 1.0)),
+            LinearColor::new(1.00, 0.76, 0.33, 1.0), // Gold
+            LinearColor::new(0.18, 0.85, 0.98, 1.0), // Cyan
+            LinearColor::new(0.95, 0.18, 0.30, 1.0), // Ruby
+            LinearColor::new(0.15, 0.88, 0.48, 1.0), // Emerald
+            LinearColor::new(0.88, 0.90, 0.95, 1.0), // Silk
         ];
 
-        for (name, col) in presets {
-            ctx.commands()
-                .spawn((
-                    ChildOf(row),
-                    BtnSetColor { node_id, color: col },
-                    UNode {
-                        width: UVal::Px(35.0),
-                        height: UVal::Px(20.0),
-                        background_color: Color::srgba(col.r, col.g, col.b, col.a),
-                        border_radius: UCornerRadius::all(3.0),
-                        ..default()
-                    },
-                    UInteraction::default(),
-                    ULayout {
-                        display: UDisplay::Flex,
-                        justify_content: UJustifyContent::Center,
-                        align_items: UAlignItems::Center,
-                        ..default()
-                    },
-                ))
-                .with_children(|b| {
-                    b.spawn(UText {
-                        text: name.into(),
-                        font_size: 8.0,
-                        font: font.clone(),
-                        color: Color::BLACK,
-                        ..default()
-                    });
-                });
+        for col in presets {
+            let be_color = Color::srgb(col.r, col.g, col.b);
+            ctx.commands().spawn((
+                ChildOf(row),
+                BtnSetColor { node_id, color: col },
+                LumaSwatch {
+                    color: be_color,
+                    selected: false,
+                },
+                UNode {
+                    width: UVal::Px(28.0),
+                    height: UVal::Px(22.0),
+                    background_color: be_color,
+                    border_radius: UCornerRadius::all(4.0),
+                    ..default()
+                },
+                UBorder {
+                    color: Color::srgba(1.0, 1.0, 1.0, 0.25),
+                    width: 1.0,
+                    radius: UCornerRadius::all(4.0),
+                    offset: 0.0,
+                },
+                UInteraction::default(),
+                UInteractionColors {
+                    normal: be_color,
+                    hovered: be_color.lighter(0.12),
+                    pressed: be_color.darker(0.12),
+                },
+            ));
         }
     }
 }
@@ -182,7 +183,7 @@ fn sync_color_palette_system(
     }
 }
 
-/// Interactive Metallic Value node with quick step buttons.
+/// Interactive Metallic Value node using `LumaButton` presets.
 #[luma_body_node(system = sync_metallic_node_system)]
 pub struct MetallicNode;
 
@@ -200,7 +201,7 @@ impl LumaNode for MetallicNode {
     }
 
     fn style(&self) -> NodeStyle {
-        NodeStyle::header_rgb(0.24, 0.36, 0.48).width(220.0)
+        NodeStyle::header_rgb(0.24, 0.36, 0.48).width(230.0)
     }
 
     fn outputs(&self) -> Vec<PinInfo> {
@@ -221,14 +222,15 @@ impl LumaNode for MetallicNode {
                     width: UVal::Percent(1.0),
                     height: UVal::Px(28.0),
                     padding: USides::axes(4.0, 2.0),
-                    background_color: Color::srgb(0.10, 0.11, 0.14),
-                    border_radius: UCornerRadius::all(4.0),
+                    background_color: Color::srgb(0.08, 0.09, 0.12),
+                    border_radius: UCornerRadius::all(6.0),
                     ..default()
                 },
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Row,
                     align_items: UAlignItems::Center,
+                    justify_content: UJustifyContent::SpaceEvenly,
                     gap: 4.0,
                     ..default()
                 },
@@ -240,14 +242,24 @@ impl LumaNode for MetallicNode {
                 .spawn((
                     ChildOf(row),
                     BtnSetVal { node_id, val },
+                    LumaButton {
+                        variant: ButtonVariant::Secondary,
+                        size: ButtonSize::Small,
+                        disabled: false,
+                    },
                     UNode {
-                        width: UVal::Px(35.0),
-                        height: UVal::Px(20.0),
-                        background_color: Color::srgb(0.18, 0.22, 0.28),
-                        border_radius: UCornerRadius::all(3.0),
+                        width: UVal::Px(36.0),
+                        height: UVal::Px(22.0),
+                        background_color: Color::srgb(0.16, 0.20, 0.26),
+                        border_radius: UCornerRadius::all(4.0),
                         ..default()
                     },
                     UInteraction::default(),
+                    UInteractionColors {
+                        normal: Color::srgb(0.16, 0.20, 0.26),
+                        hovered: Color::srgb(0.24, 0.32, 0.42),
+                        pressed: Color::srgb(0.12, 0.15, 0.20),
+                    },
                     ULayout {
                         display: UDisplay::Flex,
                         justify_content: UJustifyContent::Center,
@@ -279,7 +291,7 @@ fn sync_metallic_node_system(
     }
 }
 
-/// Interactive Roughness Value node with quick step buttons.
+/// Interactive Roughness Value node using `LumaButton` presets.
 #[luma_body_node(system = sync_roughness_node_system)]
 pub struct RoughnessNode;
 
@@ -297,7 +309,7 @@ impl LumaNode for RoughnessNode {
     }
 
     fn style(&self) -> NodeStyle {
-        NodeStyle::header_rgb(0.24, 0.36, 0.48).width(220.0)
+        NodeStyle::header_rgb(0.24, 0.36, 0.48).width(230.0)
     }
 
     fn outputs(&self) -> Vec<PinInfo> {
@@ -318,14 +330,15 @@ impl LumaNode for RoughnessNode {
                     width: UVal::Percent(1.0),
                     height: UVal::Px(28.0),
                     padding: USides::axes(4.0, 2.0),
-                    background_color: Color::srgb(0.10, 0.11, 0.14),
-                    border_radius: UCornerRadius::all(4.0),
+                    background_color: Color::srgb(0.08, 0.09, 0.12),
+                    border_radius: UCornerRadius::all(6.0),
                     ..default()
                 },
                 ULayout {
                     display: UDisplay::Flex,
                     flex_direction: UFlexDirection::Row,
                     align_items: UAlignItems::Center,
+                    justify_content: UJustifyContent::SpaceEvenly,
                     gap: 4.0,
                     ..default()
                 },
@@ -337,14 +350,30 @@ impl LumaNode for RoughnessNode {
                 .spawn((
                     ChildOf(row),
                     BtnSetVal { node_id, val },
+                    LumaButton {
+                        variant: ButtonVariant::Outline,
+                        size: ButtonSize::Small,
+                        disabled: false,
+                    },
                     UNode {
-                        width: UVal::Px(35.0),
-                        height: UVal::Px(20.0),
-                        background_color: Color::srgb(0.20, 0.24, 0.30),
-                        border_radius: UCornerRadius::all(3.0),
+                        width: UVal::Px(36.0),
+                        height: UVal::Px(22.0),
+                        background_color: Color::srgb(0.18, 0.22, 0.28),
+                        border_radius: UCornerRadius::all(4.0),
                         ..default()
                     },
+                    UBorder {
+                        color: Color::srgb(0.30, 0.36, 0.46),
+                        width: 1.0,
+                        radius: UCornerRadius::all(4.0),
+                        offset: 0.0,
+                    },
                     UInteraction::default(),
+                    UInteractionColors {
+                        normal: Color::srgb(0.18, 0.22, 0.28),
+                        hovered: Color::srgb(0.26, 0.34, 0.44),
+                        pressed: Color::srgb(0.14, 0.17, 0.22),
+                    },
                     ULayout {
                         display: UDisplay::Flex,
                         justify_content: UJustifyContent::Center,
@@ -485,7 +514,7 @@ struct PreviewMeshes {
 }
 
 // =============================================================================
-// 4. Main Entry Point (Zero Manual Node Registrations!)
+// 4. Main Entry Point
 // =============================================================================
 
 fn main() {
@@ -500,8 +529,8 @@ fn main() {
         }))
         .insert_resource(ClearColor(EditorTheme::BG_CANVAS))
         .init_resource::<ShaderPreviewViewportRect>()
-        // Auto-discovers all #[luma_node] and #[luma_body_node] nodes from inventory!
-        .add_plugins((LumaPlugin, LumaEditorPlugin, LumaUiPlugin))
+        // Auto-discovers all #[luma_node] and #[luma_body_node] from inventory!
+        .add_plugins((LumaPlugin, LumaWidgetsPlugin, LumaEditorPlugin, LumaUiPlugin))
         .add_systems(Startup, (setup_3d_preview_scene, setup_pipeline).chain())
         .add_systems(
             PostStartup,

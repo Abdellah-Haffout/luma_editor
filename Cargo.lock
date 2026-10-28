@@ -1259,6 +1259,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_luma_widgets"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_luma",
+]
+
+[[package]]
 name = "bevy_macro_utils"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4176,6 +4184,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_luma",
+ "bevy_luma_widgets",
  "glam",
  "image",
  "jackdaw_feathers",

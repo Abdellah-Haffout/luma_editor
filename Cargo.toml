@@ -44,6 +44,7 @@ luma_commands = { path = "crates/luma_commands" }
 luma_canvas = { path = "crates/luma_canvas" }
 luma_ui = { path = "crates/luma_ui" }
 bevy_luma = { path = "../bevy_luma" }
+bevy_luma_widgets = { path = "../bevy_luma_widgets" }
 jackdaw_widgets = "=0.20.0-rc.1"
 jackdaw_panels = "=0.20.0-rc.1"
 jackdaw_feathers = "=0.20.0-rc.1"
@@ -53,6 +54,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 [dependencies]
 bevy.workspace = true
 bevy_luma.workspace = true
+bevy_luma_widgets.workspace = true
 serde.workspace = true
 ron.workspace = true
 thiserror.workspace = true
