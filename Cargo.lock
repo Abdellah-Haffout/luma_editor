@@ -4178,6 +4178,8 @@ dependencies = [
  "bevy_luma",
  "glam",
  "image",
+ "jackdaw_feathers",
+ "jackdaw_panels",
  "luma_canvas",
  "luma_commands",
  "luma_core",
