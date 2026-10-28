@@ -552,25 +552,27 @@ fn visible_window_rect(
 fn sync_dock_backgrounds(
     mut commands: Commands,
     containers: Query<
-        Entity,
+        (Entity, Has<Pickable>),
         Or<(With<jackdaw_panels::Panel>, With<DockTreeHost>, With<jackdaw_panels::PanelGroup>)>,
     >,
-    areas: Query<(Entity, &ActiveDockWindow, Option<&Children>), With<DockArea>>,
-    contents: Query<(Entity, &DockTabContent)>,
+    areas: Query<(Entity, &ActiveDockWindow, Option<&Children>, Has<Pickable>), With<DockArea>>,
+    contents: Query<(Entity, &DockTabContent, Has<Pickable>)>,
     handles: Query<Entity, With<PanelHandle>>,
     mut backgrounds: Query<&mut BackgroundColor>,
 ) {
-    for entity in &containers {
+    for (entity, has_pickable) in &containers {
         if let Ok(mut bg) = backgrounds.get_mut(entity) {
             bg.set_if_neq(BackgroundColor(Color::NONE));
         }
-        commands.entity(entity).insert(Pickable::IGNORE);
+        if !has_pickable {
+            commands.entity(entity).insert(Pickable::IGNORE);
+        }
     }
 
-    for (entity, active, children) in &areas {
+    for (entity, active, children, has_pickable) in &areas {
         let shows_canvas = active.0.is_some_and(|active_tab| {
             children.into_iter().flatten().any(|child| {
-                contents.get(*child).is_ok_and(|(_, c)| {
+                contents.get(*child).is_ok_and(|(_, c, _)| {
                     c.tab_id == active_tab && c.window_id == window_ids::NODE_EDITOR
                 })
             })
@@ -583,14 +585,16 @@ fn sync_dock_backgrounds(
             Err(_) => {}
         }
         if shows_canvas {
-            commands.entity(entity).insert(Pickable::IGNORE);
-        } else {
+            if !has_pickable {
+                commands.entity(entity).insert(Pickable::IGNORE);
+            }
+        } else if has_pickable {
             commands.entity(entity).remove::<Pickable>();
         }
     }
 
-    for (entity, content) in &contents {
-        if content.window_id == window_ids::NODE_EDITOR {
+    for (entity, content, has_pickable) in &contents {
+        if content.window_id == window_ids::NODE_EDITOR && !has_pickable {
             commands.entity(entity).insert(Pickable::IGNORE);
         }
     }

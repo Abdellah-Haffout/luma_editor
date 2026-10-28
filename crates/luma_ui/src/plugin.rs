@@ -333,8 +333,10 @@ pub fn update_node_cards_position_system(
 
     for (root, mut transform) in &mut roots {
         if let Some(node) = graph.get_node(root.node_id) {
-            transform.translation.x = node.position.x;
-            transform.translation.y = node.position.y;
+            if transform.translation.x != node.position.x || transform.translation.y != node.position.y {
+                transform.translation.x = node.position.x;
+                transform.translation.y = node.position.y;
+            }
         }
     }
 
@@ -343,7 +345,10 @@ pub fn update_node_cards_position_system(
             luma_canvas::nodes::custom::get_node_instance_customization(header_bar.node_id)
         {
             if let Some(c) = ov.header_bg {
-                header_node.background_color = Color::srgba(c.r, c.g, c.b, c.a);
+                let target_bg = Color::srgba(c.r, c.g, c.b, c.a);
+                if header_node.background_color != target_bg {
+                    header_node.background_color = target_bg;
+                }
             }
         }
     }
@@ -365,25 +370,28 @@ pub fn update_node_cards_position_system(
         } else {
             (visual.body_bg, visual.type_color)
         };
-        if is_focus {
+        let (target_bg, target_border_color, target_border_width) = if is_focus {
             if Some(visual.node_id) == focused_id {
-                unode.background_color = body_bg;
-                uborder.color = EditorTheme::BORDER_FOCUSED;
-                uborder.width = 2.0;
+                (body_bg, EditorTheme::BORDER_FOCUSED, 2.0)
             } else {
-                unode.background_color = Color::srgb(0.06, 0.065, 0.075);
-                uborder.color = blender_unselected_border;
-                uborder.width = 1.0;
+                (Color::srgb(0.06, 0.065, 0.075), blender_unselected_border, 1.0)
             }
         } else {
-            unode.background_color = body_bg;
             if is_selected {
-                uborder.color = accent_color;
-                uborder.width = 2.0;
+                (body_bg, accent_color, 2.0)
             } else {
-                uborder.color = blender_unselected_border;
-                uborder.width = 1.4;
+                (body_bg, blender_unselected_border, 1.4)
             }
+        };
+
+        if unode.background_color != target_bg {
+            unode.background_color = target_bg;
+        }
+        if uborder.color != target_border_color {
+            uborder.color = target_border_color;
+        }
+        if uborder.width != target_border_width {
+            uborder.width = target_border_width;
         }
     }
 }

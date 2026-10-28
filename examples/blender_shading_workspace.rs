@@ -620,10 +620,18 @@ fn sync_wave_oscillator_system(
     mut graph: LumaGraph,
     time: Res<Time>,
     oscillators: Query<&WaveOscillatorMarker>,
+    mut last_tick: Local<f32>,
 ) {
+    if oscillators.is_empty() {
+        return;
+    }
     let t = time.elapsed_secs();
-    let wave_val = (t * 2.5).sin() * 0.5 + 0.5;
+    if t - *last_tick < 0.033 {
+        return;
+    }
+    *last_tick = t;
 
+    let wave_val = (t * 2.0).sin() * 0.5 + 0.5;
     for osc in &oscillators {
         graph.set_output(osc.0, 0, Value::float(wave_val));
     }
@@ -949,7 +957,7 @@ fn setup_pipeline(mut commands: Commands, mut graph: LumaGraph) {
     // Left Column: Generators & Inputs
     let n_palette = graph.spawn("shader.color_palette", Vec2::new(-660.0, 200.0));
     let n_invert = graph.spawn("shader.invert_color", Vec2::new(-660.0, 30.0));
-    let n_wave = graph.spawn("shader.wave_oscillator", Vec2::new(-660.0, -180.0));
+    let _n_wave = graph.spawn("shader.wave_oscillator", Vec2::new(-660.0, -180.0));
 
     // Middle Column: Shading Math & Presets
     let n_mix = graph.spawn("shader.mix_color", Vec2::new(-350.0, 160.0));
@@ -960,16 +968,16 @@ fn setup_pipeline(mut commands: Commands, mut graph: LumaGraph) {
     // Right: BSDF Output
     let n_bsdf = graph.spawn("shader.principled_bsdf", Vec2::new(140.0, -20.0));
 
-    // Wiring the Shader Graph
-    graph.connect(n_palette, 0, n_invert, 1); // Palette feeds invert
-    graph.connect(n_palette, 0, n_mix, 1);    // Palette feeds Mix A
-    graph.connect(n_invert, 0, n_mix, 2);     // Inverted color feeds Mix B
-    graph.connect(n_wave, 0, n_mix, 0);       // Sine oscillator smoothly blends A & B!
-    graph.connect(n_mix, 0, n_bsdf, 0);       // Blended color -> Principled BSDF Base Color
-
+    // Wiring the Shader Graph (Palette, Metallic, Roughness, Emission -> BSDF)
+    graph.connect(n_palette, 0, n_bsdf, 0);   // Base Color
     graph.connect(n_metallic, 0, n_bsdf, 1);  // Metallic presets -> Principled BSDF
     graph.connect(n_roughness, 0, n_bsdf, 2); // Roughness presets -> Principled BSDF
     graph.connect(n_emission, 0, n_bsdf, 3);  // Emission strength -> Principled BSDF
+
+    // Pre-wire Mix & Invert so user can easily switch or connect
+    graph.connect(n_palette, 0, n_invert, 1); // Palette feeds invert
+    graph.connect(n_palette, 0, n_mix, 1);    // Palette feeds Mix A
+    graph.connect(n_invert, 0, n_mix, 2);     // Inverted color feeds Mix B
 
     // Default output values
     graph.set_output_color(n_palette, 0, LinearColor::new(1.00, 0.76, 0.33, 1.0));
@@ -1208,6 +1216,7 @@ fn sync_shader_to_preview_material(
     mut materials: ResMut<Assets<StandardMaterial>>,
     live_mat: Res<ShaderLiveMaterial>,
     mut stats_text: Query<&mut Text, With<PreviewStatsText>>,
+    mut last_state: Local<Option<([u8; 3], u32, u32, u32)>>,
 ) {
     for (&node_id, node) in graph.graph.0.nodes() {
         if node.kind == "shader.principled_bsdf" {
@@ -1229,6 +1238,22 @@ fn sync_shader_to_preview_material(
                 Value::Primitive(PrimitiveValue::Float(f)) => f.max(0.0),
                 _ => 0.0,
             };
+
+            let state_key = (
+                [
+                    (base_color.r * 255.0) as u8,
+                    (base_color.g * 255.0) as u8,
+                    (base_color.b * 255.0) as u8,
+                ],
+                (metallic * 1000.0) as u32,
+                (roughness * 1000.0) as u32,
+                (emission * 1000.0) as u32,
+            );
+
+            if *last_state == Some(state_key) {
+                continue;
+            }
+            *last_state = Some(state_key);
 
             if let Some(mut mat) = materials.get_mut(&live_mat.material_handle) {
                 mat.base_color = Color::srgb(base_color.r, base_color.g, base_color.b);
