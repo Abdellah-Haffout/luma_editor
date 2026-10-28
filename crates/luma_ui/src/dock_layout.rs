@@ -35,14 +35,12 @@ use luma_dataflow::registry::NodeRegistry;
 
 use crate::EditorUiCamera;
 
-/// Stable ids of every editor window that can live inside a dock area.
+/// Stable ids of essential editor windows in the dock layout.
 pub mod window_ids {
     pub const NODE_EDITOR: &str = "node_editor";
     pub const OUTLINER: &str = "outliner";
-    pub const WIRES: &str = "wires";
-    pub const INSPECTOR: &str = "inspector";
-    pub const INFO: &str = "info";
     pub const LIBRARY: &str = "library";
+    pub const INSPECTOR: &str = "inspector";
 }
 
 /// Height of the fixed top header (menu + toolbar), in logical pixels.
@@ -112,16 +110,16 @@ impl Plugin for EditorDockLayoutPlugin {
     }
 }
 
-/// Builds the default Blender-like layout:
+/// Builds the default 3-column Blender-like layout:
 ///
 /// ```text
-/// +-----------+--------------------------+------------+
-/// | Outliner  |                          |            |
-/// |-----------|       Node Editor        | Properties |
-/// | Wires     |                          |            |
-/// |           |--------------------------|            |
-/// |           |  Info / Shortcuts        |            |
-/// +-----------+--------------------------+------------+
+/// +-------------------+------------------------------------------+-------------------+
+/// |     OUTLINER      |                                          |    PROPERTIES     |
+/// |   NODE LIBRARY    |               NODE EDITOR                |                   |
+/// |                   |                                          |                   |
+/// |                   |               (Full Height)              |                   |
+/// |                   |                                          |                   |
+/// +-------------------+------------------------------------------+-------------------+
 /// ```
 pub fn default_dock_tree() -> DockTree {
     use window_ids::*;
@@ -136,22 +134,23 @@ pub fn default_dock_tree() -> DockTree {
 
     let mut tree = DockTree::new();
 
-    let outliner = tree.insert(leaf("left_top", &[OUTLINER, LIBRARY]));
-    let wires = tree.insert(leaf("left_bottom", &[WIRES]));
-    let left = tree.insert(split(SplitAxis::Vertical, 0.55, outliner, wires));
+    // Left sidebar: Outliner + Node Catalog tabs (20%)
+    let left = tree.insert(leaf("left_sidebar", &[OUTLINER, LIBRARY]));
 
+    // Center viewport: Full height Node Editor canvas (60%)
     let viewport = tree.insert(DockNode::Leaf(
         DockLeaf::new("center", DockAreaStyle::TabBar)
             .with_windows(vec![NODE_EDITOR.into()])
             .persistent(),
     ));
-    let bottom = tree.insert(leaf("bottom_dock", &[INFO]));
-    let center = tree.insert(split(SplitAxis::Vertical, 0.80, viewport, bottom));
 
+    // Right sidebar: Node Inspector & Properties (20%)
     let right = tree.insert(leaf("right_sidebar", &[INSPECTOR]));
-    let center_right = tree.insert(split(SplitAxis::Horizontal, 0.77, center, right));
 
-    let root = tree.insert(split(SplitAxis::Horizontal, 0.18, left, center_right));
+    // Combine Center + Right, then Left + (Center + Right)
+    let center_right = tree.insert(split(SplitAxis::Horizontal, 0.75, viewport, right));
+    let root = tree.insert(split(SplitAxis::Horizontal, 0.20, left, center_right));
+
     tree.root = Some(root);
     tree
 }
@@ -174,10 +173,10 @@ pub fn full_canvas_dock_tree() -> DockTree {
             .with_windows(vec![NODE_EDITOR.into()])
             .persistent(),
     ));
-    let right = tree.insert(leaf("right_sidebar", &[INSPECTOR, OUTLINER, WIRES]));
+    let right = tree.insert(leaf("right_sidebar", &[INSPECTOR, OUTLINER, LIBRARY]));
     let root = tree.insert(DockNode::Split(DockSplit {
         axis: SplitAxis::Horizontal,
-        fraction: 0.84,
+        fraction: 0.82,
         a: viewport,
         b: right,
     }));
@@ -186,7 +185,7 @@ pub fn full_canvas_dock_tree() -> DockTree {
     tree
 }
 
-/// Builds a Dataflow & Debug workspace with an expanded bottom timeline and outliner.
+/// Builds a Node Library & Dataflow workspace with an expanded node catalog.
 pub fn dataflow_dock_tree() -> DockTree {
     use window_ids::*;
 
@@ -200,20 +199,17 @@ pub fn dataflow_dock_tree() -> DockTree {
 
     let mut tree = DockTree::new();
 
-    let left = tree.insert(leaf("left_panel", &[OUTLINER, LIBRARY, WIRES]));
+    let left = tree.insert(leaf("left_sidebar", &[LIBRARY, OUTLINER]));
 
     let viewport = tree.insert(DockNode::Leaf(
         DockLeaf::new("center", DockAreaStyle::TabBar)
             .with_windows(vec![NODE_EDITOR.into()])
             .persistent(),
     ));
-    let bottom = tree.insert(leaf("bottom_dock", &[INFO]));
-    let center = tree.insert(split(SplitAxis::Vertical, 0.65, viewport, bottom));
-
     let right = tree.insert(leaf("right_sidebar", &[INSPECTOR]));
-    let center_right = tree.insert(split(SplitAxis::Horizontal, 0.75, center, right));
+    let center_right = tree.insert(split(SplitAxis::Horizontal, 0.72, viewport, right));
 
-    let root = tree.insert(split(SplitAxis::Horizontal, 0.22, left, center_right));
+    let root = tree.insert(split(SplitAxis::Horizontal, 0.28, left, center_right));
     tree.root = Some(root);
     tree
 }
@@ -318,7 +314,7 @@ fn register_dock_windows(registry: &mut WindowRegistry, node_registry: &NodeRegi
         id: OUTLINER.into(),
         name: "Outliner".into(),
         icon: Some(String::from(Icon::ListTree.unicode())),
-        default_area: "left_top".into(),
+        default_area: "left_sidebar".into(),
         priority: 10,
         build: Arc::new(|parent| {
             parent
@@ -358,143 +354,6 @@ fn register_dock_windows(registry: &mut WindowRegistry, node_registry: &NodeRegi
         }),
     });
 
-    registry.register(DockWindowDescriptor {
-        id: WIRES.into(),
-        name: "Wire Shapes".into(),
-        icon: Some(String::from(Icon::Spline.unicode())),
-        default_area: "left_bottom".into(),
-        priority: 20,
-        build: Arc::new(|parent| {
-            parent
-                .spawn(Node {
-                    width: Val::Percent(100.0),
-                    padding: UiRect::all(Val::Px(tokens::SPACING_MD)),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(tokens::SPACING_SM),
-                    overflow: Overflow::scroll_y(),
-                    ..default()
-                })
-                .with_children(|col| {
-                    for style in luma_canvas::wiring::WireRoutingStyle::ALL {
-                        col.spawn((
-                            crate::bevy_ui_settings::BevyUiWireStyleBtn(style),
-                            crate::UiButton,
-                            Node {
-                                width: Val::Percent(100.0),
-                                min_height: Val::Px(26.0),
-                                padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
-                                border_radius: BorderRadius::all(Val::Px(
-                                    tokens::BORDER_RADIUS_SM,
-                                )),
-                                align_items: AlignItems::Center,
-                                ..default()
-                            },
-                            BackgroundColor(tokens::TOOLBAR_BUTTON_BG),
-                            BorderColor::all(Color::NONE),
-                            children![(
-                                crate::bevy_ui_settings::BevyUiWireStyleBtn(style),
-                                Text::new(format!("{} — {}", style.label(), style.description())),
-                                TextFont {
-                                    font_size: tokens::TEXT_SIZE_SM,
-                                    ..default()
-                                },
-                                TextColor(tokens::TEXT_PRIMARY),
-                            )],
-                        ));
-                    }
-                });
-        }),
-    });
-
-    registry.register(DockWindowDescriptor {
-        id: INSPECTOR.into(),
-        name: "Properties".into(),
-        icon: Some(String::from(Icon::SlidersHorizontal.unicode())),
-        default_area: "right_sidebar".into(),
-        priority: 30,
-        build: Arc::new(|parent| {
-            // The live inspector is an overlay glued on top of this area (see
-            // `DockAnchored`); this is what shows when nothing is selected.
-            parent.spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    padding: UiRect::all(Val::Px(tokens::SPACING_LG)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-                children![(
-                    Text::new("Select a node to inspect its properties"),
-                    TextFont {
-                        font_size: tokens::TEXT_SIZE_SM,
-                        ..default()
-                    },
-                    TextColor(tokens::TEXT_SECONDARY),
-                )],
-            ));
-        }),
-    });
-
-    registry.register(DockWindowDescriptor {
-        id: INFO.into(),
-        name: "Info".into(),
-        icon: Some(String::from(Icon::Info.unicode())),
-        default_area: "bottom_dock".into(),
-        priority: 40,
-        build: Arc::new(|parent| {
-            const SHORTCUTS: &[(&str, &str)] = &[
-                ("RMB drag", "Pan canvas"),
-                ("Scroll", "Zoom canvas"),
-                ("Space", "Search / add node"),
-                ("Tab", "Focus / dive into node"),
-                ("Ctrl+Z / Ctrl+Y", "Undo / Redo"),
-                ("Ctrl+S", "Save & bake scene"),
-                ("Delete", "Delete selection"),
-                ("Drag a tab", "Move tab or drop on edge to split area"),
-                ("Drag boundary", "Smoothly resize dock panels"),
-            ];
-            parent
-                .spawn(Node {
-                    width: Val::Percent(100.0),
-                    padding: UiRect::all(Val::Px(tokens::SPACING_MD)),
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    column_gap: Val::Px(tokens::SPACING_LG * 2.0),
-                    row_gap: Val::Px(tokens::SPACING_SM),
-                    overflow: Overflow::scroll_y(),
-                    ..default()
-                })
-                .with_children(|row| {
-                    for (keys, action) in SHORTCUTS {
-                        row.spawn(Node {
-                            column_gap: Val::Px(tokens::SPACING_MD),
-                            align_items: AlignItems::Center,
-                            ..default()
-                        })
-                        .with_children(|item| {
-                            item.spawn((
-                                Text::new(*keys),
-                                TextFont {
-                                    font_size: tokens::TEXT_SIZE_SM,
-                                    ..default()
-                                },
-                                TextColor(tokens::TEXT_ACCENT),
-                            ));
-                            item.spawn((
-                                Text::new(*action),
-                                TextFont {
-                                    font_size: tokens::TEXT_SIZE_SM,
-                                    ..default()
-                                },
-                                TextColor(tokens::TEXT_SECONDARY),
-                            ));
-                        });
-                    }
-                });
-        }),
-    });
-
     let palette_data = NodePalette::from_registry(node_registry);
     let library_items: Vec<(String, Vec<(String, String, usize, usize)>)> = palette_data
         .by_category()
@@ -524,8 +383,8 @@ fn register_dock_windows(registry: &mut WindowRegistry, node_registry: &NodeRegi
         id: LIBRARY.into(),
         name: "Node Library".into(),
         icon: Some(String::from(Icon::Boxes.unicode())),
-        default_area: "left_top".into(),
-        priority: 50,
+        default_area: "left_sidebar".into(),
+        priority: 20,
         build: Arc::new(move |parent| {
             parent
                 .spawn(Node {
@@ -586,6 +445,36 @@ fn register_dock_windows(registry: &mut WindowRegistry, node_registry: &NodeRegi
                         }
                     }
                 });
+        }),
+    });
+
+    registry.register(DockWindowDescriptor {
+        id: INSPECTOR.into(),
+        name: "Properties".into(),
+        icon: Some(String::from(Icon::SlidersHorizontal.unicode())),
+        default_area: "right_sidebar".into(),
+        priority: 30,
+        build: Arc::new(|parent| {
+            // The live inspector is an overlay glued on top of this area (see
+            // `DockAnchored`); this is what shows when nothing is selected.
+            parent.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    padding: UiRect::all(Val::Px(tokens::SPACING_LG)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                children![(
+                    Text::new("Select a node to inspect its properties"),
+                    TextFont {
+                        font_size: tokens::TEXT_SIZE_SM,
+                        ..default()
+                    },
+                    TextColor(tokens::TEXT_SECONDARY),
+                )],
+            ));
         }),
     });
 }
