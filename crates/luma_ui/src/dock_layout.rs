@@ -251,6 +251,7 @@ pub fn setup_editor_dock_layout(
         },
         BackgroundColor(Color::NONE),
         GlobalZIndex(10),
+        Pickable::IGNORE,
     ));
     if let Some(cam) = ui_cam_query.iter().next() {
         host.insert(UiTargetCamera(cam));
@@ -549,12 +550,13 @@ fn visible_window_rect(
 /// Keeps every container transparent, every regular area opaque, and the area
 /// currently showing the node editor transparent so the canvas shows through.
 fn sync_dock_backgrounds(
+    mut commands: Commands,
     containers: Query<
         Entity,
         Or<(With<jackdaw_panels::Panel>, With<DockTreeHost>, With<jackdaw_panels::PanelGroup>)>,
     >,
     areas: Query<(Entity, &ActiveDockWindow, Option<&Children>), With<DockArea>>,
-    contents: Query<&DockTabContent>,
+    contents: Query<(Entity, &DockTabContent)>,
     handles: Query<Entity, With<PanelHandle>>,
     mut backgrounds: Query<&mut BackgroundColor>,
 ) {
@@ -562,12 +564,13 @@ fn sync_dock_backgrounds(
         if let Ok(mut bg) = backgrounds.get_mut(entity) {
             bg.set_if_neq(BackgroundColor(Color::NONE));
         }
+        commands.entity(entity).insert(Pickable::IGNORE);
     }
 
     for (entity, active, children) in &areas {
         let shows_canvas = active.0.is_some_and(|active_tab| {
             children.into_iter().flatten().any(|child| {
-                contents.get(*child).is_ok_and(|c| {
+                contents.get(*child).is_ok_and(|(_, c)| {
                     c.tab_id == active_tab && c.window_id == window_ids::NODE_EDITOR
                 })
             })
@@ -578,6 +581,17 @@ fn sync_dock_backgrounds(
                 bg.set_if_neq(BackgroundColor(color));
             }
             Err(_) => {}
+        }
+        if shows_canvas {
+            commands.entity(entity).insert(Pickable::IGNORE);
+        } else {
+            commands.entity(entity).remove::<Pickable>();
+        }
+    }
+
+    for (entity, content) in &contents {
+        if content.window_id == window_ids::NODE_EDITOR {
+            commands.entity(entity).insert(Pickable::IGNORE);
         }
     }
 

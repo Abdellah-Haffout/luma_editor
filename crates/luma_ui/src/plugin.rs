@@ -403,11 +403,7 @@ pub fn node_drag_system(
             &UInteraction,
             (
                 Without<NodeCardSocketPin>,
-                Or<(
-                    With<bevy_luma::prelude::UTextInput>,
-                    With<NodeParamStepButton>,
-                    With<DiveInButton>,
-                )>,
+                Without<NodeCardRoot>,
             ),
         >,
     ),

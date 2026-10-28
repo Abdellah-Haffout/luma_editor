@@ -177,7 +177,7 @@ fn sync_color_palette_system(
     btn_query: Query<(&UInteraction, &BtnSetColor), Changed<UInteraction>>,
 ) {
     for (interaction, btn) in &btn_query {
-        if *interaction == UInteraction::Pressed {
+        if matches!(*interaction, UInteraction::Pressed | UInteraction::Clicked) {
             graph.set_output_color(btn.node_id, 0, btn.color);
         }
     }
@@ -285,7 +285,7 @@ fn sync_metallic_node_system(
     btn_query: Query<(&UInteraction, &BtnSetVal), Changed<UInteraction>>,
 ) {
     for (interaction, btn) in &btn_query {
-        if *interaction == UInteraction::Pressed {
+        if matches!(*interaction, UInteraction::Pressed | UInteraction::Clicked) {
             graph.set_output(btn.node_id, 0, Value::float(btn.val));
         }
     }
@@ -399,7 +399,7 @@ fn sync_roughness_node_system(
     btn_query: Query<(&UInteraction, &BtnSetVal), Changed<UInteraction>>,
 ) {
     for (interaction, btn) in &btn_query {
-        if *interaction == UInteraction::Pressed {
+        if matches!(*interaction, UInteraction::Pressed | UInteraction::Clicked) {
             graph.set_output(btn.node_id, 0, Value::float(btn.val));
         }
     }
