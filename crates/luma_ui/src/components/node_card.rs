@@ -142,7 +142,7 @@ pub fn spawn_luma_node_card(
     layout: &NodeCardLayout,
     is_selected: bool,
 ) -> Entity {
-    spawn_luma_node_card_with_registry(commands, font, layout, is_selected, None)
+    spawn_luma_node_card_with_registry(commands, font, layout, is_selected, None, None)
 }
 
 pub fn spawn_luma_node_card_with_registry(
@@ -151,10 +151,14 @@ pub fn spawn_luma_node_card_with_registry(
     layout: &NodeCardLayout,
     is_selected: bool,
     ui_registry: Option<&NodeBodyUiRegistry>,
+    camera: Option<Entity>,
 ) -> Entity {
     let mut root_ui = URootUi::world_2d(layout.size);
     root_ui.meters_per_unit = 1.0;
     root_ui.resolution_scale = 2.0;
+    if let Some(cam) = camera {
+        root_ui.camera = UiCameraRef::Entity(cam);
+    }
 
     let radius = layout.corner_radius;
     let blender_outline_unselected = Color::srgb(0.075, 0.075, 0.085);
@@ -617,9 +621,16 @@ pub fn spawn_bevy_ui_node_card(
     commands: &mut Commands,
     layout: &NodeCardLayout,
     is_selected: bool,
-    _target_camera: Option<Entity>,
+    target_camera: Option<Entity>,
 ) -> Entity {
-    spawn_luma_node_card(commands, Handle::default(), layout, is_selected)
+    spawn_luma_node_card_with_registry(
+        commands,
+        Handle::default(),
+        layout,
+        is_selected,
+        None,
+        target_camera,
+    )
 }
 
 /// Compatibility builder bundle.

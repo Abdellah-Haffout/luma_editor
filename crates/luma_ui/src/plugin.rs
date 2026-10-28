@@ -118,6 +118,7 @@ impl Plugin for LumaUiPlugin {
                 Update,
                 (
                     sync_node_cards_system,
+                    bind_node_cards_camera_system,
                     node_drag_system,
                     update_node_cards_position_system,
                     update_node_socket_pins_system,
@@ -257,7 +258,9 @@ pub fn sync_node_cards_system(
     ui_registry: Option<Res<NodeBodyUiRegistry>>,
     mut selection_res: ResMut<EditorSelectionResource>,
     existing_roots: Query<(Entity, &NodeCardRoot)>,
+    editor_cam: Query<Entity, With<EditorCamera>>,
 ) {
+    let target_cam = editor_cam.iter().next();
     let graph = &graph_res.0;
     let font = theme_opt.map(|t| t.text.font.inter_regular.clone()).unwrap_or_default();
 
@@ -290,7 +293,23 @@ pub fn sync_node_cards_system(
                     &layout,
                     is_selected,
                     ui_registry.as_deref(),
+                    target_cam,
                 );
+            }
+        }
+    }
+}
+
+/// Automatically binds node card `URootUi` instances explicitly to the `EditorCamera`.
+/// Eliminates `AutoAmbiguousCamera` warnings when secondary 3D cameras exist in the scene.
+pub fn bind_node_cards_camera_system(
+    editor_cam: Query<Entity, With<EditorCamera>>,
+    mut roots: Query<&mut URootUi, With<NodeCardRoot>>,
+) {
+    if let Some(cam) = editor_cam.iter().next() {
+        for mut root in &mut roots {
+            if root.camera == UiCameraRef::Auto {
+                root.camera = UiCameraRef::Entity(cam);
             }
         }
     }

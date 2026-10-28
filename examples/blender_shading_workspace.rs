@@ -544,8 +544,24 @@ fn main() {
                 toggle_preview_mesh,
             ),
         )
-        .add_systems(PostUpdate, update_preview_viewport_rect)
+        .add_systems(
+            PostUpdate,
+            (bind_world_ui_camera, update_preview_viewport_rect),
+        )
         .run();
+}
+
+fn bind_world_ui_camera(
+    editor_camera: Query<Entity, With<EditorCamera>>,
+    mut roots: Query<&mut URootUi>,
+) {
+    if let Some(cam) = editor_camera.iter().next() {
+        for mut root in &mut roots {
+            if root.camera == UiCameraRef::Auto {
+                root.camera = UiCameraRef::Entity(cam);
+            }
+        }
+    }
 }
 
 // =============================================================================
