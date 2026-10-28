@@ -59,6 +59,156 @@ pub fn principled_bsdf(
     base_color
 }
 
+/// Mix Color (MixRGB) node blending two linear colors via a scalar factor.
+#[luma_node(
+    kind = "shader.mix_color",
+    category = "Color",
+    tag = "MIX",
+    title = "Mix Color",
+    header_rgb = [0.46, 0.38, 0.18]
+)]
+pub fn mix_color(
+    #[default = 0.5] factor: f32,
+    #[default = LinearColor::new(1.00, 0.76, 0.33, 1.0)] a: LinearColor,
+    #[default = LinearColor::new(0.18, 0.85, 0.98, 1.0)] b: LinearColor,
+) -> LinearColor {
+    let t = factor.clamp(0.0, 1.0);
+    LinearColor::new(
+        a.r * (1.0 - t) + b.r * t,
+        a.g * (1.0 - t) + b.g * t,
+        a.b * (1.0 - t) + b.b * t,
+        1.0,
+    )
+}
+
+/// Invert Color node reversing RGB channels.
+#[luma_node(
+    kind = "shader.invert_color",
+    category = "Color",
+    tag = "INV",
+    title = "Invert Color",
+    header_rgb = [0.46, 0.38, 0.18]
+)]
+pub fn invert_color(
+    #[default = 1.0] factor: f32,
+    #[default = LinearColor::new(1.0, 1.0, 1.0, 1.0)] color: LinearColor,
+) -> LinearColor {
+    let t = factor.clamp(0.0, 1.0);
+    LinearColor::new(
+        color.r * (1.0 - t) + (1.0 - color.r) * t,
+        color.g * (1.0 - t) + (1.0 - color.g) * t,
+        color.b * (1.0 - t) + (1.0 - color.b) * t,
+        1.0,
+    )
+}
+
+/// Color Ramp preset generating smooth gradients from a 0..1 scalar factor.
+#[luma_node(
+    kind = "shader.color_ramp",
+    category = "Converter",
+    tag = "RAMP",
+    title = "Color Ramp",
+    header_rgb = [0.24, 0.34, 0.46]
+)]
+pub fn color_ramp(#[default = 0.5] factor: f32) -> LinearColor {
+    let t = factor.clamp(0.0, 1.0);
+    if t < 0.33 {
+        let f = t / 0.33;
+        LinearColor::new(0.1 + f * 0.1, 0.2 + f * 0.6, 0.9 - f * 0.4, 1.0)
+    } else if t < 0.66 {
+        let f = (t - 0.33) / 0.33;
+        LinearColor::new(0.2 + f * 0.8, 0.8 - f * 0.2, 0.5 - f * 0.4, 1.0)
+    } else {
+        let f = (t - 0.66) / 0.34;
+        LinearColor::new(1.0, 0.6 - f * 0.4, 0.1, 1.0)
+    }
+}
+
+/// Fresnel node computing viewing-angle reflection falloff using IOR.
+#[luma_node(
+    kind = "shader.fresnel",
+    category = "Input",
+    tag = "FRES",
+    title = "Fresnel",
+    header_rgb = [0.18, 0.36, 0.44]
+)]
+pub fn fresnel(#[default = 1.45] ior: f32) -> f32 {
+    let r0 = ((1.0 - ior) / (1.0 + ior)).powi(2);
+    (r0 + (1.0 - r0) * 0.65).clamp(0.0, 1.0)
+}
+
+/// Float Math Multiply node.
+#[luma_node(
+    kind = "shader.math_multiply",
+    category = "Converter",
+    tag = "MUL",
+    title = "Math (Multiply)",
+    header_rgb = [0.28, 0.32, 0.48]
+)]
+pub fn math_multiply(#[default = 1.0] a: f32, #[default = 2.0] b: f32) -> f32 {
+    a * b
+}
+
+/// Float Math Add node.
+#[luma_node(
+    kind = "shader.math_add",
+    category = "Converter",
+    tag = "ADD",
+    title = "Math (Add)",
+    header_rgb = [0.28, 0.32, 0.48]
+)]
+pub fn math_add(#[default = 0.0] a: f32, #[default = 0.5] b: f32) -> f32 {
+    a + b
+}
+
+/// Emission shader node multiplying color by luminous intensity.
+#[luma_node(
+    kind = "shader.emission",
+    category = "Shader",
+    tag = "EMIT",
+    title = "Emission",
+    header_rgb = [0.18, 0.48, 0.36]
+)]
+pub fn emission_shader(
+    #[default = LinearColor::new(0.2, 0.85, 1.0, 1.0)] color: LinearColor,
+    #[default = 3.0] strength: f32,
+) -> LinearColor {
+    let s = strength.max(0.0);
+    LinearColor::new(color.r * s, color.g * s, color.b * s, 1.0)
+}
+
+/// Procedural Checker Texture pattern node.
+#[luma_node(
+    kind = "shader.checker_texture",
+    category = "Texture",
+    tag = "CHECK",
+    title = "Checker Texture",
+    header_rgb = [0.48, 0.28, 0.20]
+)]
+pub fn checker_texture(
+    #[default = 4.0] scale: f32,
+    #[default = LinearColor::new(0.90, 0.90, 0.92, 1.0)] color1: LinearColor,
+    #[default = LinearColor::new(0.12, 0.14, 0.18, 1.0)] color2: LinearColor,
+) -> LinearColor {
+    if (scale as i32) % 2 == 0 {
+        color1
+    } else {
+        color2
+    }
+}
+
+/// Float Value input node.
+#[luma_node(
+    kind = "shader.value",
+    category = "Input",
+    tag = "VAL",
+    title = "Value",
+    header_rgb = [0.18, 0.36, 0.44]
+)]
+pub fn value_node(#[default = 0.5] value: f32) -> f32 {
+    value
+}
+
 // =============================================================================
 // 2. Interactive UI Body Nodes Powered by `bevy_luma_widgets`
 // =============================================================================
@@ -479,6 +629,126 @@ fn sync_wave_oscillator_system(
     }
 }
 
+/// Interactive Emission Strength node utilizing `LumaButton` presets.
+#[luma_body_node(system = sync_emission_node_system)]
+pub struct EmissionNode;
+
+impl LumaNode for EmissionNode {
+    fn kind(&self) -> &'static str {
+        "shader.emission_val"
+    }
+
+    fn title(&self) -> &str {
+        "Emission Strength"
+    }
+
+    fn category(&self) -> (&'static str, &'static str) {
+        ("Shader", "EMIT")
+    }
+
+    fn style(&self) -> NodeStyle {
+        NodeStyle::header_rgb(0.55, 0.35, 0.15).width(240.0)
+    }
+
+    fn outputs(&self) -> Vec<PinInfo> {
+        vec![PinInfo::float("emission")]
+    }
+
+    fn body_height(&self) -> f32 {
+        34.0
+    }
+
+    fn show_body(&self, ctx: &mut NodeBodyContext) {
+        let node_id = ctx.node_id();
+        let font = ctx.font();
+
+        let row = ctx
+            .spawn((
+                UNode {
+                    width: UVal::Percent(1.0),
+                    height: UVal::Px(26.0),
+                    padding: USides::axes(4.0, 2.0),
+                    background_color: Color::srgb(0.12, 0.10, 0.08),
+                    border_radius: UCornerRadius::all(6.0),
+                    ..default()
+                },
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Center,
+                    justify_content: UJustifyContent::SpaceEvenly,
+                    gap: 4.0,
+                    ..default()
+                },
+            ))
+            .id();
+
+        for (lbl, val) in [("Off", 0.0), ("1.0", 1.0), ("3.0", 3.0), ("6.0", 6.0), ("12.0", 12.0)] {
+            ctx.commands()
+                .spawn((
+                    ChildOf(row),
+                    BtnSetVal { node_id, val },
+                    LumaButton {
+                        variant: ButtonVariant::Secondary,
+                        size: ButtonSize::Small,
+                        disabled: false,
+                    },
+                    UNode {
+                        width: UVal::Px(38.0),
+                        height: UVal::Px(22.0),
+                        background_color: if val > 0.0 {
+                            Color::srgb(0.24, 0.18, 0.12)
+                        } else {
+                            Color::srgb(0.16, 0.16, 0.18)
+                        },
+                        border_radius: UCornerRadius::all(4.0),
+                        ..default()
+                    },
+                    UInteraction::default(),
+                    UInteractionColors {
+                        normal: if val > 0.0 {
+                            Color::srgb(0.24, 0.18, 0.12)
+                        } else {
+                            Color::srgb(0.16, 0.16, 0.18)
+                        },
+                        hovered: Color::srgb(0.45, 0.32, 0.18),
+                        pressed: Color::srgb(0.20, 0.14, 0.08),
+                    },
+                    ULayout {
+                        display: UDisplay::Flex,
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
+                        ..default()
+                    },
+                ))
+                .with_children(|b| {
+                    b.spawn(UText {
+                        text: lbl.into(),
+                        font_size: 8.5,
+                        font: font.clone(),
+                        color: if val > 0.0 {
+                            Color::srgb(1.0, 0.85, 0.5)
+                        } else {
+                            Color::srgb(0.7, 0.7, 0.7)
+                        },
+                        ..default()
+                    });
+                });
+        }
+    }
+}
+
+fn sync_emission_node_system(
+    mut graph: LumaGraph,
+    btn_query: Query<(&UInteraction, &BtnSetVal), Changed<UInteraction>>,
+) {
+    for (interaction, btn) in &btn_query {
+        if matches!(*interaction, UInteraction::Pressed | UInteraction::Clicked) {
+            graph.set_output(btn.node_id, 0, Value::float(btn.val));
+        }
+    }
+}
+
 // =============================================================================
 // 3. Resources & Viewport Components
 // =============================================================================
@@ -676,20 +946,36 @@ fn setup_pipeline(mut commands: Commands, mut graph: LumaGraph) {
         Transform::from_xyz(0.0, 0.0, 0.0),
     ));
 
-    let n_palette = graph.spawn("shader.color_palette", Vec2::new(-360.0, 140.0));
-    let n_metallic = graph.spawn("shader.metallic_val", Vec2::new(-360.0, -20.0));
-    let n_roughness = graph.spawn("shader.roughness_val", Vec2::new(-360.0, -180.0));
-    let n_wave = graph.spawn("shader.wave_oscillator", Vec2::new(-360.0, -340.0));
-    let n_bsdf = graph.spawn("shader.principled_bsdf", Vec2::new(120.0, -20.0));
+    // Left Column: Generators & Inputs
+    let n_palette = graph.spawn("shader.color_palette", Vec2::new(-660.0, 200.0));
+    let n_invert = graph.spawn("shader.invert_color", Vec2::new(-660.0, 30.0));
+    let n_wave = graph.spawn("shader.wave_oscillator", Vec2::new(-660.0, -180.0));
 
-    graph.connect(n_palette, 0, n_bsdf, 0);
-    graph.connect(n_metallic, 0, n_bsdf, 1);
-    graph.connect(n_roughness, 0, n_bsdf, 2);
-    graph.connect(n_wave, 0, n_bsdf, 3);
+    // Middle Column: Shading Math & Presets
+    let n_mix = graph.spawn("shader.mix_color", Vec2::new(-350.0, 160.0));
+    let n_metallic = graph.spawn("shader.metallic_val", Vec2::new(-350.0, -10.0));
+    let n_roughness = graph.spawn("shader.roughness_val", Vec2::new(-350.0, -160.0));
+    let n_emission = graph.spawn("shader.emission_val", Vec2::new(-350.0, -310.0));
 
+    // Right: BSDF Output
+    let n_bsdf = graph.spawn("shader.principled_bsdf", Vec2::new(140.0, -20.0));
+
+    // Wiring the Shader Graph
+    graph.connect(n_palette, 0, n_invert, 1); // Palette feeds invert
+    graph.connect(n_palette, 0, n_mix, 1);    // Palette feeds Mix A
+    graph.connect(n_invert, 0, n_mix, 2);     // Inverted color feeds Mix B
+    graph.connect(n_wave, 0, n_mix, 0);       // Sine oscillator smoothly blends A & B!
+    graph.connect(n_mix, 0, n_bsdf, 0);       // Blended color -> Principled BSDF Base Color
+
+    graph.connect(n_metallic, 0, n_bsdf, 1);  // Metallic presets -> Principled BSDF
+    graph.connect(n_roughness, 0, n_bsdf, 2); // Roughness presets -> Principled BSDF
+    graph.connect(n_emission, 0, n_bsdf, 3);  // Emission strength -> Principled BSDF
+
+    // Default output values
     graph.set_output_color(n_palette, 0, LinearColor::new(1.00, 0.76, 0.33, 1.0));
     graph.set_output(n_metallic, 0, Value::float(0.80));
     graph.set_output(n_roughness, 0, Value::float(0.25));
+    graph.set_output(n_emission, 0, Value::float(0.00));
 
     graph.select(n_bsdf);
 }
