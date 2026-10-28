@@ -97,16 +97,23 @@ pub struct EditorDockLayoutPlugin;
 
 impl Plugin for EditorDockLayoutPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<NodeEditorViewportRect>().add_systems(
-            PostUpdate,
-            (
-                sync_dock_backgrounds,
-                update_node_editor_viewport_rect,
-                follow_dock_anchors,
-            )
-                .chain()
-                .before(bevy::ui::UiSystems::Layout),
-        );
+        app.init_resource::<NodeEditorViewportRect>()
+            .add_observer(on_dock_tab_close_press)
+            .add_observer(on_dock_tab_close_click)
+            .add_observer(on_dock_tab_auxiliary_click)
+            .add_observer(on_dock_grip_right_click)
+            .add_observer(set_close_btn_hover::<PointerOver>(Color::srgba(0.85, 0.25, 0.25, 0.35)))
+            .add_observer(set_close_btn_hover::<PointerOut>(Color::NONE))
+            .add_systems(
+                PostUpdate,
+                (
+                    sync_dock_backgrounds,
+                    update_node_editor_viewport_rect,
+                    follow_dock_anchors,
+                )
+                    .chain()
+                    .before(bevy::ui::UiSystems::Layout),
+            );
     }
 }
 
@@ -638,6 +645,151 @@ fn follow_dock_anchors(
         }
         if *node != target {
             *node = target;
+        }
+    }
+}
+
+fn set_close_btn_hover<E: EntityEvent>(
+    color: Color,
+) -> impl Fn(On<E>, Commands, Query<(), With<jackdaw_panels::area::DockTabCloseButton>>) {
+    move |event, mut commands, filter| {
+        if filter.contains(event.event_target()) {
+            commands
+                .entity(event.event_target())
+                .insert(BackgroundColor(color));
+        }
+    }
+}
+
+/// Intercepts PointerPress on DockTabCloseButton so it does not bubble up to DockTab
+/// (which would activate the tab instead of closing it).
+fn on_dock_tab_close_press(
+    mut press: On<PointerPress>,
+    close_buttons: Query<&jackdaw_panels::area::DockTabCloseButton>,
+    parent_q: Query<&ChildOf>,
+) {
+    let target = press.event_target();
+    if close_buttons.contains(target)
+        || parent_q.iter_ancestors(target).any(|p| close_buttons.contains(p))
+    {
+        press.propagate(false);
+    }
+}
+
+/// Closes a dock tab when its [X] close button is clicked.
+fn on_dock_tab_close_click(
+    mut click: On<PointerClick>,
+    close_buttons: Query<&jackdaw_panels::area::DockTabCloseButton>,
+    parent_q: Query<&ChildOf>,
+    mut tree: ResMut<DockTree>,
+) {
+    if click.event().button != PointerButton::Primary {
+        return;
+    }
+    let target = click.event_target();
+    let tab_id = if let Ok(btn) = close_buttons.get(target) {
+        Some(btn.tab_id)
+    } else {
+        parent_q
+            .iter_ancestors(target)
+            .find_map(|p| close_buttons.get(p).ok().map(|b| b.tab_id))
+    };
+
+    if let Some(tab_id) = tab_id {
+        // Prevent closing the primary node editor canvas if it's the only one
+        let is_node_editor = tree
+            .tabs()
+            .any(|(_, t)| t.id == tab_id && t.window_id == window_ids::NODE_EDITOR);
+        let node_editor_count = tree
+            .tabs()
+            .filter(|(_, t)| t.window_id == window_ids::NODE_EDITOR)
+            .count();
+        if is_node_editor && node_editor_count <= 1 {
+            return;
+        }
+
+        click.propagate(false);
+        tree.remove_tab(tab_id);
+    }
+}
+
+/// Closes a dock tab when clicked with Middle mouse button or Right mouse button (Secondary).
+fn on_dock_tab_auxiliary_click(
+    mut click: On<PointerClick>,
+    tabs: Query<&jackdaw_panels::area::DockTab>,
+    parent_q: Query<&ChildOf>,
+    mut tree: ResMut<DockTree>,
+) {
+    let button = click.event().button;
+    if button != PointerButton::Middle && button != PointerButton::Secondary {
+        return;
+    }
+    let target = click.event_target();
+    let tab = if let Ok(t) = tabs.get(target) {
+        Some(t)
+    } else {
+        parent_q
+            .iter_ancestors(target)
+            .find_map(|p| tabs.get(p).ok())
+    };
+
+    if let Some(tab) = tab {
+        let is_node_editor = tree
+            .tabs()
+            .any(|(_, t)| t.id == tab.tab_id && t.window_id == window_ids::NODE_EDITOR);
+        let node_editor_count = tree
+            .tabs()
+            .filter(|(_, t)| t.window_id == window_ids::NODE_EDITOR)
+            .count();
+        if is_node_editor && node_editor_count <= 1 {
+            return;
+        }
+
+        click.propagate(false);
+        tree.remove_tab(tab.tab_id);
+    }
+}
+
+/// Closes the entire area / panel when its right-hand grip handle is right-clicked.
+fn on_dock_grip_right_click(
+    mut click: On<PointerClick>,
+    grips: Query<&ChildOf, With<jackdaw_panels::tabs::DockTabGrip>>,
+    parent_q: Query<&ChildOf>,
+    bindings: Query<&jackdaw_panels::reconcile::LeafBinding>,
+    mut tree: ResMut<DockTree>,
+) {
+    if click.event().button != PointerButton::Secondary {
+        return;
+    }
+    let target = click.event_target();
+    let is_grip = grips.contains(target)
+        || parent_q.iter_ancestors(target).any(|p| grips.contains(p));
+    if !is_grip {
+        return;
+    }
+
+    if let Some(area) = parent_q.iter_ancestors(target).find(|p| bindings.contains(*p)) {
+        if let Ok(binding) = bindings.get(area) {
+            click.propagate(false);
+            let leaf_tabs: Vec<_> = if let Some(leaf) = tree.get(binding.0).and_then(|n| n.as_leaf()) {
+                leaf.windows.iter().map(|t| t.id).collect()
+            } else {
+                Vec::new()
+            };
+
+            for tab_id in leaf_tabs {
+                let is_node_editor = tree
+                    .tabs()
+                    .any(|(_, t)| t.id == tab_id && t.window_id == window_ids::NODE_EDITOR);
+                let node_editor_count = tree
+                    .tabs()
+                    .filter(|(_, t)| t.window_id == window_ids::NODE_EDITOR)
+                    .count();
+                if is_node_editor && node_editor_count <= 1 {
+                    continue;
+                }
+                tree.remove_tab(tab_id);
+            }
         }
     }
 }

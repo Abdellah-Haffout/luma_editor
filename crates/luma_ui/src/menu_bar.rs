@@ -57,6 +57,7 @@ pub enum MenuItemAction {
     ViewTogglePalette,
     ViewToggleInspector,
     ViewResetZoom,
+    ViewResetLayout,
 
     // Help
     HelpShortcuts,
@@ -162,6 +163,7 @@ pub fn setup_bevy_ui_menu_dropdowns(
                 ("Add Node (Palette)", "Tab", MenuItemAction::ViewTogglePalette),
                 ("Inspector Panel", "I", MenuItemAction::ViewToggleInspector),
                 ("Reset Camera Zoom", "Home", MenuItemAction::ViewResetZoom),
+                ("Reset Dock Layout", "F12", MenuItemAction::ViewResetLayout),
             ],
         ),
         (
@@ -382,12 +384,15 @@ pub fn bevy_ui_menu_actions_system(
     mut toast_query: Query<(&mut BevyUiToast, &mut Node), (Without<BevyUiSpawnPalette>, Without<BevyUiDropdownPanel>, Without<BevyUiInspectorRoot>)>,
     mut toast_text: Query<&mut Text, With<BevyUiToastText>>,
     mut dispatcher: ResMut<EditorDispatcherResource>,
-    mut graph_res: ResMut<EditorGraphResource>,
-    mut history_res: ResMut<EditorHistoryResource>,
-    mut payload_res: ResMut<EditorDomainPayloadResource>,
-    mut dataflow_res: ResMut<EditorDataflowResource>,
+    (mut graph_res, mut history_res, mut payload_res, mut dataflow_res): (
+        ResMut<EditorGraphResource>,
+        ResMut<EditorHistoryResource>,
+        ResMut<EditorDomainPayloadResource>,
+        ResMut<EditorDataflowResource>,
+    ),
     mut selection_res: ResMut<EditorSelectionResource>,
     id_gen_res: Res<EditorIdGenResource>,
+    mut dock_tree: Option<ResMut<jackdaw_panels::tree::DockTree>>,
 ) {
     for (interaction, btn) in &item_clicks {
         if *interaction != Interaction::Pressed {
@@ -558,12 +563,35 @@ pub fn bevy_ui_menu_actions_system(
             }
 
             MenuItemAction::ViewToggleInspector => {
-                for mut node in &mut inspector_nodes {
-                    node.display = if node.display == Display::Flex {
-                        Display::None
-                    } else {
-                        Display::Flex
-                    };
+                if let Some(ref mut tree) = dock_tree {
+                    if tree.has_window_kind(crate::dock_layout::window_ids::INSPECTOR) {
+                        tree.remove_window_kind(crate::dock_layout::window_ids::INSPECTOR);
+                    } else if let Some(leaf) = tree.find_by_area_id("right_sidebar") {
+                        tree.add_tab(leaf, crate::dock_layout::window_ids::INSPECTOR);
+                    } else if let Some(root) = tree.root {
+                        tree.split(root, jackdaw_panels::tree::Edge::Right, crate::dock_layout::window_ids::INSPECTOR.into());
+                    }
+                } else {
+                    for mut node in &mut inspector_nodes {
+                        node.display = if node.display == Display::Flex {
+                            Display::None
+                        } else {
+                            Display::Flex
+                        };
+                    }
+                }
+            }
+
+            MenuItemAction::ViewResetLayout => {
+                if let Some(ref mut tree) = dock_tree {
+                    **tree = crate::dock_layout::default_dock_tree();
+                    for (mut toast, mut t_node) in &mut toast_query {
+                        t_node.display = Display::Flex;
+                        toast.timer.reset();
+                    }
+                    for mut text in &mut toast_text {
+                        **text = "✔ Dock layout reset to default".to_string();
+                    }
                 }
             }
 
