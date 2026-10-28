@@ -1,14 +1,10 @@
 //! Blender-Style Shading Workspace Example:
 //!
-//! A pure two-panel workspace inspired by Blender's Shading workspace:
-//! 1. **3D Viewport (Shader Preview)**: A live 3D preview of a PBR material on interactive
-//!    3D geometry (UV Sphere, Torus, Cuboid) rendered to an offscreen texture with studio lighting.
-//!    Supports mouse orbit and mesh switching with key `M`.
-//! 2. **Shader Editor (Node Graph)**: The node graph canvas defining the material
-//!    properties (Color Palette, Metallic, Roughness, Wave Oscillator, Principled BSDF).
-//!
-//! **Constraint Fulfilled**: Zero core modifications! All existing core crates
-//! (`luma_core`, `luma_canvas`, `luma_dataflow`, etc.) are completely untouched.
+//! Declarative, macro-driven node architecture based on `node_editor_showcase`:
+//! - Pure functions as nodes via `#[luma_node]`.
+//! - Interactive widgets via `#[luma_body_node(system = ...)]`.
+//! - Zero `.register_node(...)` calls in `main()`.
+//! - Pure 2-panel Blender dock layout (3D Viewport on left, Shader Editor on right).
 //!
 //! Run with:
 //! ```bash
@@ -33,24 +29,38 @@ use luma_canvas::plugin::{EditorCamera, LumaEditorPlugin};
 use luma_core::id::NodeId;
 use luma_dataflow::value::{LinearColor, PrimitiveValue, Value};
 use luma_ui::{
-    EditorTheme, EditorUiCamera, LumaGraph, LumaSnarlAppExt, LumaUiPlugin, NodeDef, PinInfo,
+    luma_body_node, luma_node, EditorTheme, EditorUiCamera, LumaGraph, LumaNode, LumaUiPlugin,
+    NodeBodyContext, NodeStyle, PinInfo,
 };
 
 const SHADER_PREVIEW_WINDOW: &str = "shader_preview";
 const SHADER_PREVIEW_LAYER: usize = 1;
 
 // =============================================================================
-// 1. Data Structures & Components
+// 1. Pure Function Nodes (Auto-Registered via #[luma_node])
 // =============================================================================
 
-#[derive(Component)]
-struct PreviewSphere;
+/// Principled BSDF shader node implemented as a clean, declarative Rust function.
+/// All input pins and default parameters are declared directly in the signature.
+#[luma_node(
+    kind = "shader.principled_bsdf",
+    category = "Shader",
+    tag = "BSDF",
+    title = "Principled BSDF",
+    header_rgb = [0.18, 0.48, 0.36]
+)]
+pub fn principled_bsdf(
+    #[default = LinearColor::new(1.00, 0.76, 0.33, 1.0)] base_color: LinearColor,
+    #[default = 0.80] _metallic: f32,
+    #[default = 0.25] _roughness: f32,
+    #[default = 0.00] _emission: f32,
+) -> LinearColor {
+    base_color
+}
 
-#[derive(Component)]
-struct ShaderPreviewRoot;
-
-#[derive(Component)]
-struct PreviewStatsText;
+// =============================================================================
+// 2. Interactive UI Body Nodes (Auto-Registered via #[luma_body_node])
+// =============================================================================
 
 #[derive(Component)]
 struct BtnSetColor {
@@ -65,25 +75,393 @@ struct BtnSetVal {
 }
 
 #[derive(Component)]
-#[allow(dead_code)]
-struct PrincipledBsdfWidget {
-    node_id: NodeId,
+struct WaveOscillatorMarker(NodeId);
+
+/// Interactive Color Palette node with 5 one-click presets.
+#[luma_body_node(system = sync_color_palette_system)]
+pub struct ColorPaletteNode;
+
+impl LumaNode for ColorPaletteNode {
+    fn kind(&self) -> &'static str {
+        "shader.color_palette"
+    }
+
+    fn title(&self) -> &str {
+        "Color Palette"
+    }
+
+    fn category(&self) -> (&'static str, &'static str) {
+        ("Input", "COLOR")
+    }
+
+    fn style(&self) -> NodeStyle {
+        NodeStyle::header_rgb(0.62, 0.45, 0.16).width(220.0)
+    }
+
+    fn outputs(&self) -> Vec<PinInfo> {
+        vec![PinInfo::color("Color")]
+    }
+
+    fn body_height(&self) -> f32 {
+        34.0
+    }
+
+    fn show_body(&self, ctx: &mut NodeBodyContext) {
+        let node_id = ctx.node_id();
+        let font = ctx.font();
+
+        let row = ctx
+            .spawn((
+                UNode {
+                    width: UVal::Percent(1.0),
+                    height: UVal::Px(28.0),
+                    padding: USides::axes(4.0, 2.0),
+                    background_color: Color::srgb(0.10, 0.11, 0.14),
+                    border_radius: UCornerRadius::all(4.0),
+                    ..default()
+                },
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Center,
+                    gap: 5.0,
+                    ..default()
+                },
+            ))
+            .id();
+
+        let presets = [
+            ("Gold", LinearColor::new(1.00, 0.76, 0.33, 1.0)),
+            ("Cyan", LinearColor::new(0.18, 0.85, 0.98, 1.0)),
+            ("Ruby", LinearColor::new(0.95, 0.18, 0.30, 1.0)),
+            ("Lime", LinearColor::new(0.15, 0.88, 0.48, 1.0)),
+            ("Silk", LinearColor::new(0.88, 0.90, 0.95, 1.0)),
+        ];
+
+        for (name, col) in presets {
+            ctx.commands()
+                .spawn((
+                    ChildOf(row),
+                    BtnSetColor { node_id, color: col },
+                    UNode {
+                        width: UVal::Px(35.0),
+                        height: UVal::Px(20.0),
+                        background_color: Color::srgba(col.r, col.g, col.b, col.a),
+                        border_radius: UCornerRadius::all(3.0),
+                        ..default()
+                    },
+                    UInteraction::default(),
+                    ULayout {
+                        display: UDisplay::Flex,
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
+                        ..default()
+                    },
+                ))
+                .with_children(|b| {
+                    b.spawn(UText {
+                        text: name.into(),
+                        font_size: 8.0,
+                        font: font.clone(),
+                        color: Color::BLACK,
+                        ..default()
+                    });
+                });
+        }
+    }
 }
 
-#[derive(Component)]
-struct BsdfColorSwatch {
-    node_id: NodeId,
+fn sync_color_palette_system(
+    mut graph: LumaGraph,
+    btn_query: Query<(&UInteraction, &BtnSetColor), Changed<UInteraction>>,
+) {
+    for (interaction, btn) in &btn_query {
+        if *interaction == UInteraction::Pressed {
+            graph.set_output_color(btn.node_id, 0, btn.color);
+        }
+    }
 }
 
-#[derive(Component)]
-struct BsdfReadoutText {
-    node_id: NodeId,
+/// Interactive Metallic Value node with quick step buttons.
+#[luma_body_node(system = sync_metallic_node_system)]
+pub struct MetallicNode;
+
+impl LumaNode for MetallicNode {
+    fn kind(&self) -> &'static str {
+        "shader.metallic_val"
+    }
+
+    fn title(&self) -> &str {
+        "Metallic Value"
+    }
+
+    fn category(&self) -> (&'static str, &'static str) {
+        ("Input", "VAL")
+    }
+
+    fn style(&self) -> NodeStyle {
+        NodeStyle::header_rgb(0.24, 0.36, 0.48).width(220.0)
+    }
+
+    fn outputs(&self) -> Vec<PinInfo> {
+        vec![PinInfo::float("Metallic")]
+    }
+
+    fn body_height(&self) -> f32 {
+        34.0
+    }
+
+    fn show_body(&self, ctx: &mut NodeBodyContext) {
+        let node_id = ctx.node_id();
+        let font = ctx.font();
+
+        let row = ctx
+            .spawn((
+                UNode {
+                    width: UVal::Percent(1.0),
+                    height: UVal::Px(28.0),
+                    padding: USides::axes(4.0, 2.0),
+                    background_color: Color::srgb(0.10, 0.11, 0.14),
+                    border_radius: UCornerRadius::all(4.0),
+                    ..default()
+                },
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Center,
+                    gap: 4.0,
+                    ..default()
+                },
+            ))
+            .id();
+
+        for (lbl, val) in [("0.0", 0.0), ("0.25", 0.25), ("0.5", 0.5), ("0.85", 0.85), ("1.0", 1.0)] {
+            ctx.commands()
+                .spawn((
+                    ChildOf(row),
+                    BtnSetVal { node_id, val },
+                    UNode {
+                        width: UVal::Px(35.0),
+                        height: UVal::Px(20.0),
+                        background_color: Color::srgb(0.18, 0.22, 0.28),
+                        border_radius: UCornerRadius::all(3.0),
+                        ..default()
+                    },
+                    UInteraction::default(),
+                    ULayout {
+                        display: UDisplay::Flex,
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
+                        ..default()
+                    },
+                ))
+                .with_children(|b| {
+                    b.spawn(UText {
+                        text: lbl.into(),
+                        font_size: 8.5,
+                        font: font.clone(),
+                        color: Color::WHITE,
+                        ..default()
+                    });
+                });
+        }
+    }
 }
 
-#[derive(Component)]
-struct WaveOscillatorMarker {
-    node_id: NodeId,
+fn sync_metallic_node_system(
+    mut graph: LumaGraph,
+    btn_query: Query<(&UInteraction, &BtnSetVal), Changed<UInteraction>>,
+) {
+    for (interaction, btn) in &btn_query {
+        if *interaction == UInteraction::Pressed {
+            graph.set_output(btn.node_id, 0, Value::float(btn.val));
+        }
+    }
 }
+
+/// Interactive Roughness Value node with quick step buttons.
+#[luma_body_node(system = sync_roughness_node_system)]
+pub struct RoughnessNode;
+
+impl LumaNode for RoughnessNode {
+    fn kind(&self) -> &'static str {
+        "shader.roughness_val"
+    }
+
+    fn title(&self) -> &str {
+        "Roughness Value"
+    }
+
+    fn category(&self) -> (&'static str, &'static str) {
+        ("Input", "VAL")
+    }
+
+    fn style(&self) -> NodeStyle {
+        NodeStyle::header_rgb(0.24, 0.36, 0.48).width(220.0)
+    }
+
+    fn outputs(&self) -> Vec<PinInfo> {
+        vec![PinInfo::float("Roughness")]
+    }
+
+    fn body_height(&self) -> f32 {
+        34.0
+    }
+
+    fn show_body(&self, ctx: &mut NodeBodyContext) {
+        let node_id = ctx.node_id();
+        let font = ctx.font();
+
+        let row = ctx
+            .spawn((
+                UNode {
+                    width: UVal::Percent(1.0),
+                    height: UVal::Px(28.0),
+                    padding: USides::axes(4.0, 2.0),
+                    background_color: Color::srgb(0.10, 0.11, 0.14),
+                    border_radius: UCornerRadius::all(4.0),
+                    ..default()
+                },
+                ULayout {
+                    display: UDisplay::Flex,
+                    flex_direction: UFlexDirection::Row,
+                    align_items: UAlignItems::Center,
+                    gap: 4.0,
+                    ..default()
+                },
+            ))
+            .id();
+
+        for (lbl, val) in [("0.05", 0.05), ("0.20", 0.20), ("0.40", 0.40), ("0.70", 0.70), ("1.0", 1.0)] {
+            ctx.commands()
+                .spawn((
+                    ChildOf(row),
+                    BtnSetVal { node_id, val },
+                    UNode {
+                        width: UVal::Px(35.0),
+                        height: UVal::Px(20.0),
+                        background_color: Color::srgb(0.20, 0.24, 0.30),
+                        border_radius: UCornerRadius::all(3.0),
+                        ..default()
+                    },
+                    UInteraction::default(),
+                    ULayout {
+                        display: UDisplay::Flex,
+                        justify_content: UJustifyContent::Center,
+                        align_items: UAlignItems::Center,
+                        ..default()
+                    },
+                ))
+                .with_children(|b| {
+                    b.spawn(UText {
+                        text: lbl.into(),
+                        font_size: 8.5,
+                        font: font.clone(),
+                        color: Color::WHITE,
+                        ..default()
+                    });
+                });
+        }
+    }
+}
+
+fn sync_roughness_node_system(
+    mut graph: LumaGraph,
+    btn_query: Query<(&UInteraction, &BtnSetVal), Changed<UInteraction>>,
+) {
+    for (interaction, btn) in &btn_query {
+        if *interaction == UInteraction::Pressed {
+            graph.set_output(btn.node_id, 0, Value::float(btn.val));
+        }
+    }
+}
+
+/// Harmonic Sine Wave Oscillator node.
+#[luma_body_node(system = sync_wave_oscillator_system)]
+pub struct WaveOscillatorNode;
+
+impl LumaNode for WaveOscillatorNode {
+    fn kind(&self) -> &'static str {
+        "shader.wave_oscillator"
+    }
+
+    fn title(&self) -> &str {
+        "Sine Oscillator"
+    }
+
+    fn category(&self) -> (&'static str, &'static str) {
+        ("Math", "WAVE")
+    }
+
+    fn style(&self) -> NodeStyle {
+        NodeStyle::header_rgb(0.34, 0.24, 0.54).width(200.0)
+    }
+
+    fn outputs(&self) -> Vec<PinInfo> {
+        vec![PinInfo::float("Wave")]
+    }
+
+    fn body_height(&self) -> f32 {
+        28.0
+    }
+
+    fn show_body(&self, ctx: &mut NodeBodyContext) {
+        let node_id = ctx.node_id();
+        let font = ctx.font();
+
+        ctx.spawn((
+            WaveOscillatorMarker(node_id),
+            UNode {
+                width: UVal::Percent(1.0),
+                height: UVal::Px(24.0),
+                padding: USides::axes(6.0, 2.0),
+                background_color: Color::srgb(0.12, 0.10, 0.16),
+                border_radius: UCornerRadius::all(4.0),
+                ..default()
+            },
+            ULayout {
+                display: UDisplay::Flex,
+                align_items: UAlignItems::Center,
+                ..default()
+            },
+        ))
+        .with_children(|row| {
+            row.spawn(UText {
+                text: "~ Live Breathing Sine ~".into(),
+                font_size: 9.0,
+                font,
+                color: Color::srgb(0.75, 0.65, 0.95),
+                ..default()
+            });
+        });
+    }
+}
+
+fn sync_wave_oscillator_system(
+    mut graph: LumaGraph,
+    time: Res<Time>,
+    oscillators: Query<&WaveOscillatorMarker>,
+) {
+    let t = time.elapsed_secs();
+    let wave_val = (t * 2.5).sin() * 0.5 + 0.5;
+
+    for osc in &oscillators {
+        graph.set_output(osc.0, 0, Value::float(wave_val));
+    }
+}
+
+// =============================================================================
+// 3. Resources & Viewport Components
+// =============================================================================
+
+#[derive(Component)]
+struct PreviewSphere;
+
+#[derive(Component)]
+struct ShaderPreviewRoot;
+
+#[derive(Component)]
+struct PreviewStatsText;
 
 #[derive(Resource)]
 struct ShaderPreviewTexture {
@@ -107,7 +485,7 @@ struct PreviewMeshes {
 }
 
 // =============================================================================
-// 2. Main Entry Point
+// 4. Main Entry Point (Zero Manual Node Registrations!)
 // =============================================================================
 
 fn main() {
@@ -122,325 +500,8 @@ fn main() {
         }))
         .insert_resource(ClearColor(EditorTheme::BG_CANVAS))
         .init_resource::<ShaderPreviewViewportRect>()
+        // Auto-discovers all #[luma_node] and #[luma_body_node] nodes from inventory!
         .add_plugins((LumaPlugin, LumaEditorPlugin, LumaUiPlugin))
-        // Register custom shader domain nodes
-        .register_node(
-            NodeDef::new("shader.color_palette", "Color Palette")
-                .category("Input", "COLOR")
-                .header_rgb(0.62, 0.45, 0.16)
-                .width(220.0)
-                .output(PinInfo::color("Color"))
-                .body(36.0, |ctx| {
-                    let node_id = ctx.node_id();
-                    let font = ctx.font();
-
-                    let row = ctx
-                        .spawn((
-                            UNode {
-                                width: UVal::Percent(1.0),
-                                height: UVal::Px(28.0),
-                                padding: USides::axes(4.0, 2.0),
-                                background_color: Color::srgb(0.10, 0.11, 0.14),
-                                border_radius: UCornerRadius::all(4.0),
-                                ..default()
-                            },
-                            ULayout {
-                                display: UDisplay::Flex,
-                                flex_direction: UFlexDirection::Row,
-                                align_items: UAlignItems::Center,
-                                gap: 5.0,
-                                ..default()
-                            },
-                        ))
-                        .id();
-
-                    let presets = [
-                        ("Gold", LinearColor::new(1.00, 0.76, 0.33, 1.0)),
-                        ("Cyan", LinearColor::new(0.18, 0.85, 0.98, 1.0)),
-                        ("Ruby", LinearColor::new(0.95, 0.18, 0.30, 1.0)),
-                        ("Lime", LinearColor::new(0.15, 0.88, 0.48, 1.0)),
-                        ("Silk", LinearColor::new(0.88, 0.90, 0.95, 1.0)),
-                    ];
-
-                    for (name, col) in presets {
-                        ctx.commands()
-                            .spawn((
-                                ChildOf(row),
-                                BtnSetColor { node_id, color: col },
-                                UNode {
-                                    width: UVal::Px(35.0),
-                                    height: UVal::Px(20.0),
-                                    background_color: Color::srgba(col.r, col.g, col.b, col.a),
-                                    border_radius: UCornerRadius::all(3.0),
-                                    ..default()
-                                },
-                                UInteraction::default(),
-                                ULayout {
-                                    display: UDisplay::Flex,
-                                    justify_content: UJustifyContent::Center,
-                                    align_items: UAlignItems::Center,
-                                    ..default()
-                                },
-                            ))
-                            .with_children(|b| {
-                                b.spawn(UText {
-                                    text: name.into(),
-                                    font_size: 8.0,
-                                    font: font.clone(),
-                                    color: Color::BLACK,
-                                    ..default()
-                                });
-                            });
-                    }
-                }),
-        )
-        .register_node(
-            NodeDef::new("shader.metallic_val", "Metallic Value")
-                .category("Input", "VAL")
-                .header_rgb(0.24, 0.36, 0.48)
-                .width(220.0)
-                .output(PinInfo::float("Metallic"))
-                .body(36.0, |ctx| {
-                    let node_id = ctx.node_id();
-                    let font = ctx.font();
-
-                    let row = ctx
-                        .spawn((
-                            UNode {
-                                width: UVal::Percent(1.0),
-                                height: UVal::Px(28.0),
-                                padding: USides::axes(4.0, 2.0),
-                                background_color: Color::srgb(0.10, 0.11, 0.14),
-                                border_radius: UCornerRadius::all(4.0),
-                                ..default()
-                            },
-                            ULayout {
-                                display: UDisplay::Flex,
-                                flex_direction: UFlexDirection::Row,
-                                align_items: UAlignItems::Center,
-                                gap: 4.0,
-                                ..default()
-                            },
-                        ))
-                        .id();
-
-                    let steps = [("0.0", 0.0), ("0.25", 0.25), ("0.5", 0.5), ("0.85", 0.85), ("1.0", 1.0)];
-
-                    for (lbl, val) in steps {
-                        ctx.commands()
-                            .spawn((
-                                ChildOf(row),
-                                BtnSetVal { node_id, val },
-                                UNode {
-                                    width: UVal::Px(35.0),
-                                    height: UVal::Px(20.0),
-                                    background_color: Color::srgb(0.18, 0.22, 0.28),
-                                    border_radius: UCornerRadius::all(3.0),
-                                    ..default()
-                                },
-                                UInteraction::default(),
-                                ULayout {
-                                    display: UDisplay::Flex,
-                                    justify_content: UJustifyContent::Center,
-                                    align_items: UAlignItems::Center,
-                                    ..default()
-                                },
-                            ))
-                            .with_children(|b| {
-                                b.spawn(UText {
-                                    text: lbl.into(),
-                                    font_size: 8.5,
-                                    font: font.clone(),
-                                    color: Color::WHITE,
-                                    ..default()
-                                });
-                            });
-                    }
-                }),
-        )
-        .register_node(
-            NodeDef::new("shader.roughness_val", "Roughness Value")
-                .category("Input", "VAL")
-                .header_rgb(0.24, 0.36, 0.48)
-                .width(220.0)
-                .output(PinInfo::float("Roughness"))
-                .body(36.0, |ctx| {
-                    let node_id = ctx.node_id();
-                    let font = ctx.font();
-
-                    let row = ctx
-                        .spawn((
-                            UNode {
-                                width: UVal::Percent(1.0),
-                                height: UVal::Px(28.0),
-                                padding: USides::axes(4.0, 2.0),
-                                background_color: Color::srgb(0.10, 0.11, 0.14),
-                                border_radius: UCornerRadius::all(4.0),
-                                ..default()
-                            },
-                            ULayout {
-                                display: UDisplay::Flex,
-                                flex_direction: UFlexDirection::Row,
-                                align_items: UAlignItems::Center,
-                                gap: 4.0,
-                                ..default()
-                            },
-                        ))
-                        .id();
-
-                    let steps = [("0.05", 0.05), ("0.20", 0.20), ("0.40", 0.40), ("0.70", 0.70), ("1.0", 1.0)];
-
-                    for (lbl, val) in steps {
-                        ctx.commands()
-                            .spawn((
-                                ChildOf(row),
-                                BtnSetVal { node_id, val },
-                                UNode {
-                                    width: UVal::Px(35.0),
-                                    height: UVal::Px(20.0),
-                                    background_color: Color::srgb(0.20, 0.24, 0.30),
-                                    border_radius: UCornerRadius::all(3.0),
-                                    ..default()
-                                },
-                                UInteraction::default(),
-                                ULayout {
-                                    display: UDisplay::Flex,
-                                    justify_content: UJustifyContent::Center,
-                                    align_items: UAlignItems::Center,
-                                    ..default()
-                                },
-                            ))
-                            .with_children(|b| {
-                                b.spawn(UText {
-                                    text: lbl.into(),
-                                    font_size: 8.5,
-                                    font: font.clone(),
-                                    color: Color::WHITE,
-                                    ..default()
-                                });
-                            });
-                    }
-                }),
-        )
-        .register_node(
-            NodeDef::new("shader.wave_oscillator", "Sine Oscillator")
-                .category("Math", "WAVE")
-                .header_rgb(0.34, 0.24, 0.54)
-                .width(200.0)
-                .output(PinInfo::float("Wave"))
-                .body(28.0, |ctx| {
-                    let node_id = ctx.node_id();
-                    let font = ctx.font();
-
-                    ctx.spawn((
-                        WaveOscillatorMarker { node_id },
-                        UNode {
-                            width: UVal::Percent(1.0),
-                            height: UVal::Px(24.0),
-                            padding: USides::axes(6.0, 2.0),
-                            background_color: Color::srgb(0.12, 0.10, 0.16),
-                            border_radius: UCornerRadius::all(4.0),
-                            ..default()
-                        },
-                        ULayout {
-                            display: UDisplay::Flex,
-                            align_items: UAlignItems::Center,
-                            ..default()
-                        },
-                    ))
-                    .with_children(|row| {
-                        row.spawn(UText {
-                            text: "~ Live Breathing Sine ~".into(),
-                            font_size: 9.0,
-                            font: font.clone(),
-                            color: Color::srgb(0.75, 0.65, 0.95),
-                            ..default()
-                        });
-                    });
-                }),
-        )
-        .register_node(
-            NodeDef::new("shader.principled_bsdf", "Principled BSDF")
-                .category("Shader", "BSDF")
-                .header_rgb(0.18, 0.48, 0.36)
-                .width(250.0)
-                .input(PinInfo::color("Base Color"))
-                .input(PinInfo::float("Metallic").default_float(0.0))
-                .input(PinInfo::float("Roughness").default_float(0.3))
-                .input(PinInfo::float("Emission").default_float(0.0))
-                .output(PinInfo::color("Surface"))
-                .body(50.0, |ctx| {
-                    let node_id = ctx.node_id();
-                    let font = ctx.font();
-
-                    let row = ctx
-                        .spawn((
-                            PrincipledBsdfWidget { node_id },
-                            UNode {
-                                width: UVal::Percent(1.0),
-                                height: UVal::Px(44.0),
-                                padding: USides::axes(6.0, 3.0),
-                                background_color: Color::srgb(0.09, 0.12, 0.11),
-                                border_radius: UCornerRadius::all(4.0),
-                                ..default()
-                            },
-                            ULayout {
-                                display: UDisplay::Flex,
-                                flex_direction: UFlexDirection::Row,
-                                align_items: UAlignItems::Center,
-                                justify_content: UJustifyContent::SpaceBetween,
-                                ..default()
-                            },
-                        ))
-                        .id();
-
-                    ctx.commands()
-                        .spawn((
-                            ChildOf(row),
-                            UNode {
-                                width: UVal::Px(120.0),
-                                height: UVal::Px(36.0),
-                                ..default()
-                            },
-                            ULayout {
-                                display: UDisplay::Flex,
-                                flex_direction: UFlexDirection::Column,
-                                gap: 2.0,
-                                ..default()
-                            },
-                        ))
-                        .with_children(|col| {
-                            col.spawn((
-                                BsdfReadoutText { node_id },
-                                UText {
-                                    text: "Material: Standard PBR\nTarget: 3D Viewport".into(),
-                                    font_size: 9.0,
-                                    font: font.clone(),
-                                    color: Color::srgb(0.85, 0.90, 0.88),
-                                    ..default()
-                                },
-                            ));
-                        });
-
-                    ctx.commands().spawn((
-                        ChildOf(row),
-                        BsdfColorSwatch { node_id },
-                        UNode {
-                            width: UVal::Px(32.0),
-                            height: UVal::Px(32.0),
-                            background_color: Color::srgb(1.00, 0.76, 0.33),
-                            border_radius: UCornerRadius::all(4.0),
-                            ..default()
-                        },
-                        UBorder {
-                            color: Color::srgb(0.30, 0.40, 0.35),
-                            width: 1.0,
-                            radius: UCornerRadius::all(4.0),
-                            offset: 0.0,
-                        },
-                    ));
-                }),
-        )
         .add_systems(Startup, (setup_3d_preview_scene, setup_pipeline).chain())
         .add_systems(
             PostStartup,
@@ -449,9 +510,6 @@ fn main() {
         .add_systems(
             Update,
             (
-                sync_color_picker_system,
-                sync_value_slider_system,
-                sync_wave_oscillator_system,
                 sync_shader_to_preview_material,
                 orbit_preview_object,
                 toggle_preview_mesh,
@@ -462,7 +520,7 @@ fn main() {
 }
 
 // =============================================================================
-// 3. 3D Preview Scene Setup (Offscreen Texture on Layer 1)
+// 5. 3D Preview Scene Setup (Offscreen Texture on Layer 1)
 // =============================================================================
 
 fn setup_3d_preview_scene(
@@ -471,7 +529,6 @@ fn setup_3d_preview_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // 1. Offscreen Render Target Texture
     let image = Image::new_target_texture(
         1024,
         1024,
@@ -483,7 +540,6 @@ fn setup_3d_preview_scene(
         handle: image_handle.clone(),
     });
 
-    // 2. Initial PBR Material
     let material_handle = materials.add(StandardMaterial {
         base_color: Color::srgb(1.00, 0.76, 0.33),
         metallic: 0.80,
@@ -495,7 +551,6 @@ fn setup_3d_preview_scene(
         material_handle: material_handle.clone(),
     });
 
-    // 3. Meshes collection
     let sphere = meshes.add(Sphere::new(1.25).mesh().uv(48, 24));
     let torus = meshes.add(Torus::new(0.45, 1.15));
     let cuboid = meshes.add(Cuboid::new(1.8, 1.8, 1.8));
@@ -509,7 +564,6 @@ fn setup_3d_preview_scene(
 
     let preview_layer = RenderLayers::layer(SHADER_PREVIEW_LAYER);
 
-    // 4. Spawn 3D Mesh
     commands.spawn((
         Mesh3d(sphere),
         MeshMaterial3d(material_handle),
@@ -518,8 +572,7 @@ fn setup_3d_preview_scene(
         preview_layer.clone(),
     ));
 
-    // 5. Studio 3-Point Lighting Setup
-    // Key Light
+    // Studio 3-Point Lighting
     commands.spawn((
         DirectionalLight {
             illuminance: 14_000.0,
@@ -530,7 +583,6 @@ fn setup_3d_preview_scene(
         preview_layer.clone(),
     ));
 
-    // Cool Fill Light
     commands.spawn((
         PointLight {
             intensity: 450_000.0,
@@ -542,7 +594,6 @@ fn setup_3d_preview_scene(
         preview_layer.clone(),
     ));
 
-    // Rim / Backlight
     commands.spawn((
         DirectionalLight {
             illuminance: 6_000.0,
@@ -554,7 +605,7 @@ fn setup_3d_preview_scene(
         preview_layer.clone(),
     ));
 
-    // 6. 3D Camera rendering into the offscreen texture
+    // 3D Camera rendering into offscreen texture
     commands.spawn((
         Camera3d::default(),
         Camera {
@@ -569,11 +620,10 @@ fn setup_3d_preview_scene(
 }
 
 // =============================================================================
-// 4. 2D Node Pipeline Setup
+// 6. 2D Node Pipeline Setup
 // =============================================================================
 
 fn setup_pipeline(mut commands: Commands, mut graph: LumaGraph) {
-    // 2D Camera for world canvas and screen UI
     commands.spawn((
         Camera2d,
         EditorCamera,
@@ -581,20 +631,17 @@ fn setup_pipeline(mut commands: Commands, mut graph: LumaGraph) {
         Transform::from_xyz(0.0, 0.0, 0.0),
     ));
 
-    // Spawn classic Blender shader nodes:
     let n_palette = graph.spawn("shader.color_palette", Vec2::new(-360.0, 140.0));
     let n_metallic = graph.spawn("shader.metallic_val", Vec2::new(-360.0, -20.0));
     let n_roughness = graph.spawn("shader.roughness_val", Vec2::new(-360.0, -180.0));
     let n_wave = graph.spawn("shader.wave_oscillator", Vec2::new(-360.0, -340.0));
     let n_bsdf = graph.spawn("shader.principled_bsdf", Vec2::new(120.0, -20.0));
 
-    // Connect node graph:
-    graph.connect(n_palette, 0, n_bsdf, 0); // Color Palette -> BSDF Base Color
-    graph.connect(n_metallic, 0, n_bsdf, 1); // Metallic Val -> BSDF Metallic
-    graph.connect(n_roughness, 0, n_bsdf, 2); // Roughness Val -> BSDF Roughness
-    graph.connect(n_wave, 0, n_bsdf, 3);      // Sine Oscillator -> BSDF Emission
+    graph.connect(n_palette, 0, n_bsdf, 0);
+    graph.connect(n_metallic, 0, n_bsdf, 1);
+    graph.connect(n_roughness, 0, n_bsdf, 2);
+    graph.connect(n_wave, 0, n_bsdf, 3);
 
-    // Set initial outputs:
     graph.set_output_color(n_palette, 0, LinearColor::new(1.00, 0.76, 0.33, 1.0));
     graph.set_output(n_metallic, 0, Value::float(0.80));
     graph.set_output(n_roughness, 0, Value::float(0.25));
@@ -603,7 +650,7 @@ fn setup_pipeline(mut commands: Commands, mut graph: LumaGraph) {
 }
 
 // =============================================================================
-// 5. Dock Layout: Pure 2-Tab Blender Workspace
+// 7. Dock Layout: Pure 2-Tab Blender Workspace
 // =============================================================================
 
 fn setup_blender_shading_workspace(
@@ -612,12 +659,11 @@ fn setup_blender_shading_workspace(
     mut dock_tree: ResMut<DockTree>,
     preview_texture: Res<ShaderPreviewTexture>,
 ) {
-    // 1. Remove non-shading windows to keep ONLY the two tabs
     registry.unregister(luma_ui::window_ids::OUTLINER);
     registry.unregister(luma_ui::window_ids::LIBRARY);
     registry.unregister(luma_ui::window_ids::INSPECTOR);
 
-    // 2. Register Tab 1: Shader Preview (3D Viewport)
+    // Tab 1: 3D Viewport (Shader Preview)
     let preview_handle = preview_texture.handle.clone();
     registry.register(DockWindowDescriptor {
         id: SHADER_PREVIEW_WINDOW.into(),
@@ -639,7 +685,6 @@ fn setup_blender_shading_workspace(
                     BackgroundColor(Color::srgb(0.08, 0.09, 0.11)),
                 ))
                 .with_children(|vp| {
-                    // Blender-style 3D Viewport header banner
                     vp.spawn((
                         Node {
                             width: Val::Percent(100.0),
@@ -675,7 +720,6 @@ fn setup_blender_shading_workspace(
                         ));
                     });
 
-                    // Offscreen 3D rendered texture displayed via ImageNode
                     vp.spawn((
                         Node {
                             width: Val::Percent(100.0),
@@ -694,7 +738,7 @@ fn setup_blender_shading_workspace(
         }),
     });
 
-    // 3. Register Tab 2: Shader Node Editor (Transparent hole for world canvas)
+    // Tab 2: Shader Node Editor
     registry.unregister(luma_ui::window_ids::NODE_EDITOR);
     registry.register(DockWindowDescriptor {
         id: luma_ui::window_ids::NODE_EDITOR.into(),
@@ -716,8 +760,7 @@ fn setup_blender_shading_workspace(
         }),
     });
 
-    // 4. Construct the pure 2-tab binary split DockTree:
-    // Left: 3D Viewport (45%) | Right: Shader Editor (55%)
+    // Pure 2-Tab Binary Split: 45% Preview / 55% Editor
     let mut tree = DockTree::new();
     let preview_leaf = tree.insert(DockNode::Leaf(
         DockLeaf::new("preview_area", DockAreaStyle::TabBar)
@@ -738,7 +781,7 @@ fn setup_blender_shading_workspace(
     tree.root = Some(root);
     *dock_tree = tree.clone();
 
-    // 5. Workspace Tab: Exactly one active "Shading" workspace
+    // Single "Shading" Workspace
     workspace_registry.workspaces.clear();
     workspace_registry.register(WorkspaceDescriptor {
         id: "shading".into(),
@@ -752,7 +795,7 @@ fn setup_blender_shading_workspace(
 }
 
 // =============================================================================
-// 6. Interactive Update Systems
+// 8. Viewport & Material Sync Systems
 // =============================================================================
 
 fn update_preview_viewport_rect(
@@ -806,7 +849,6 @@ fn orbit_preview_object(
             transform.rotate_y(delta.x * 0.008);
             transform.rotate_x(delta.y * 0.008);
         } else {
-            // Gentle idle turntable rotation
             transform.rotate_y(0.30 * time.delta_secs());
         }
     }
@@ -830,75 +872,33 @@ fn toggle_preview_mesh(
     }
 }
 
-fn sync_color_picker_system(
-    mut graph: LumaGraph,
-    btn_query: Query<(&UInteraction, &BtnSetColor), Changed<UInteraction>>,
-) {
-    for (interaction, btn) in &btn_query {
-        if *interaction == UInteraction::Pressed {
-            graph.set_output_color(btn.node_id, 0, btn.color);
-        }
-    }
-}
-
-fn sync_value_slider_system(
-    mut graph: LumaGraph,
-    btn_query: Query<(&UInteraction, &BtnSetVal), Changed<UInteraction>>,
-) {
-    for (interaction, btn) in &btn_query {
-        if *interaction == UInteraction::Pressed {
-            graph.set_output(btn.node_id, 0, Value::float(btn.val));
-        }
-    }
-}
-
-fn sync_wave_oscillator_system(
-    mut graph: LumaGraph,
-    time: Res<Time>,
-    oscillators: Query<&WaveOscillatorMarker>,
-) {
-    let t = time.elapsed_secs();
-    let wave_val = (t * 2.5).sin() * 0.5 + 0.5; // Smooth 0.0 .. 1.0 sine
-
-    for osc in &oscillators {
-        graph.set_output(osc.node_id, 0, Value::float(wave_val));
-    }
-}
-
 fn sync_shader_to_preview_material(
     graph: LumaGraph,
     mut materials: ResMut<Assets<StandardMaterial>>,
     live_mat: Res<ShaderLiveMaterial>,
     mut stats_text: Query<&mut Text, With<PreviewStatsText>>,
-    mut swatches: Query<(&BsdfColorSwatch, &mut UNode)>,
-    mut readouts: Query<(&BsdfReadoutText, &mut UText)>,
 ) {
     for (&node_id, node) in graph.graph.0.nodes() {
         if node.kind == "shader.principled_bsdf" {
-            // Input 0: Base Color
             let base_color = graph
                 .input_color(node_id, 0)
                 .unwrap_or(LinearColor::new(1.00, 0.76, 0.33, 1.0));
 
-            // Input 1: Metallic
             let metallic = match graph.input_value(node_id, 1) {
                 Value::Primitive(PrimitiveValue::Float(f)) => f.clamp(0.0, 1.0),
-                _ => 0.0,
+                _ => 0.80,
             };
 
-            // Input 2: Roughness
             let roughness = match graph.input_value(node_id, 2) {
                 Value::Primitive(PrimitiveValue::Float(f)) => f.clamp(0.04, 1.0),
-                _ => 0.30,
+                _ => 0.25,
             };
 
-            // Input 3: Emission
             let emission = match graph.input_value(node_id, 3) {
                 Value::Primitive(PrimitiveValue::Float(f)) => f.max(0.0),
                 _ => 0.0,
             };
 
-            // 1. Update 3D PBR StandardMaterial
             if let Some(mut mat) = materials.get_mut(&live_mat.material_handle) {
                 mat.base_color = Color::srgb(base_color.r, base_color.g, base_color.b);
                 mat.metallic = metallic;
@@ -914,24 +914,11 @@ fn sync_shader_to_preview_material(
                 }
             }
 
-            // 2. Update Viewport Header Banner Text
             for mut text in &mut stats_text {
                 **text = format!(
                     "RGB: ({:.2}, {:.2}, {:.2}) | Met: {:.2} | Rough: {:.2} | Emit: {:.2}",
                     base_color.r, base_color.g, base_color.b, metallic, roughness, emission
                 );
-            }
-
-            // 3. Update BSDF Node Swatch and Text
-            for (swatch, mut unode) in &mut swatches {
-                if swatch.node_id == node_id {
-                    unode.background_color = Color::srgb(base_color.r, base_color.g, base_color.b);
-                }
-            }
-            for (readout, mut utext) in &mut readouts {
-                if readout.node_id == node_id {
-                    utext.text = format!("Met: {:.2}  Rough: {:.2}\nEmit: {:.2}", metallic, roughness, emission);
-                }
             }
         }
     }
