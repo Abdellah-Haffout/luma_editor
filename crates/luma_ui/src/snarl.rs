@@ -5,6 +5,7 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use bevy_luma::prelude::*;
 use luma_canvas::nodes::card::NodeCardLayout;
 use luma_canvas::nodes::custom::{register_custom_node_template, CustomNodeBuilder};
 use luma_canvas::nodes::palette::NodePalette;
@@ -200,6 +201,7 @@ pub struct NodeBodyContext<'a, 'w, 's> {
     slot_entity: Entity,
     layout: &'a NodeCardLayout,
     font: Handle<Font>,
+    icon_font: Handle<Font>,
 }
 
 impl<'a, 'w, 's> NodeBodyContext<'a, 'w, 's> {
@@ -208,12 +210,14 @@ impl<'a, 'w, 's> NodeBodyContext<'a, 'w, 's> {
         slot_entity: Entity,
         layout: &'a NodeCardLayout,
         font: Handle<Font>,
+        icon_font: Handle<Font>,
     ) -> Self {
         Self {
             commands,
             slot_entity,
             layout,
             font,
+            icon_font,
         }
     }
 
@@ -232,6 +236,11 @@ impl<'a, 'w, 's> NodeBodyContext<'a, 'w, 's> {
         self.font.clone()
     }
 
+    /// Default UI icon font handle (Lucide).
+    pub fn icon_font(&self) -> Handle<Font> {
+        self.icon_font.clone()
+    }
+
     /// Full card layout metadata.
     pub fn layout(&self) -> &NodeCardLayout {
         self.layout
@@ -245,6 +254,13 @@ impl<'a, 'w, 's> NodeBodyContext<'a, 'w, 's> {
     /// Spawns a child entity directly inside the node's body slot.
     pub fn spawn(&mut self, bundle: impl Bundle) -> EntityCommands<'_> {
         let mut ec = self.commands.spawn(bundle);
+        ec.insert(ChildOf(self.slot_entity));
+        ec
+    }
+
+    /// Spawns a scene directly inside the node's body slot as a child.
+    pub fn spawn_scene(&mut self, scene: impl Scene) -> EntityCommands<'_> {
+        let mut ec = self.commands.spawn_scene(scene);
         ec.insert(ChildOf(self.slot_entity));
         ec
     }
@@ -531,10 +547,25 @@ fn apply_node_to_world(world: &mut World, arc_node: Arc<dyn LumaNode>) {
     }
 
     if body_h > 0.0 {
+        let icon_font = world
+            .get_resource::<Theme>()
+            .map(|t| t.icon.font.clone())
+            .unwrap_or_else(|| {
+                world
+                    .get_resource::<jackdaw_feathers::icons::IconFont>()
+                    .map(|i| i.0.clone())
+                    .unwrap_or_default()
+            });
         let ui_node = arc_node;
         if let Some(mut ui_reg) = world.get_resource_mut::<NodeBodyUiRegistry>() {
             ui_reg.register(kind, move |commands, slot_entity, layout, font| {
-                let mut ctx = NodeBodyContext::new(commands, slot_entity, layout, font);
+                let mut ctx = NodeBodyContext::new(
+                    commands,
+                    slot_entity,
+                    layout,
+                    font.clone(),
+                    icon_font.clone(),
+                );
                 ui_node.show_body(&mut ctx);
             });
         }

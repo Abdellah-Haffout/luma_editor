@@ -1,6 +1,6 @@
 use luma_core::graph::GraphStore;
 use luma_core::id::{NodeId, PinId};
-use crate::types::{AssetLoaderData, EntityAssemblerData, MaterialData, MeshData};
+use crate::types::{AssetLoaderData, EntityAssemblerData, MaterialData, MeshData, PhysicsData};
 use bevy::math::{Quat, Vec3};
 use std::collections::HashMap;
 
@@ -12,6 +12,7 @@ pub struct AssembledSceneEntity {
     pub scale: Vec3,
     pub mesh_source: Option<String>,
     pub material: Option<MaterialData>,
+    pub physics: Option<PhysicsData>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -20,6 +21,7 @@ pub struct DomainPayloadStore {
     pub meshes: HashMap<NodeId, MeshData>,
     pub materials: HashMap<NodeId, MaterialData>,
     pub entities: HashMap<NodeId, EntityAssemblerData>,
+    pub physics: HashMap<NodeId, PhysicsData>,
 }
 
 impl DomainPayloadStore {
@@ -41,6 +43,9 @@ impl DomainPayloadStore {
             }
             "EntityAssembler" => {
                 self.entities.entry(node_id).or_default();
+            }
+            "PhysicsNode" => {
+                self.physics.entry(node_id).or_default();
             }
             _ => {}
         }
@@ -70,6 +75,11 @@ impl DomainPayloadStore {
                     self.entities.insert(to_id, data);
                 }
             }
+            "PhysicsNode" => {
+                if let Some(data) = self.physics.get(&from_id).cloned() {
+                    self.physics.insert(to_id, data);
+                }
+            }
             _ => {}
         }
     }
@@ -80,6 +90,7 @@ impl DomainPayloadStore {
         self.meshes.remove(&node_id);
         self.materials.remove(&node_id);
         self.entities.remove(&node_id);
+        self.physics.remove(&node_id);
     }
 
     /// Recursively traces an incoming connection pin backwards through Subgraphs and boundary nodes
@@ -181,12 +192,18 @@ impl DomainPayloadStore {
 
         let mut mesh_source = None;
         let mut material = None;
+        let mut physics = None;
 
         // Iterate through all incoming connections to this node's input pins
         for &pin_id in &node.inputs {
             let conn_ids = graph.get_pin_connections(pin_id);
             for &conn_id in conn_ids {
                 if let Some(conn) = graph.get_connection(conn_id) {
+                    if let Some(src_pin) = graph.get_pin(conn.source_pin) {
+                        if let Some(phys) = self.physics.get(&src_pin.node_id) {
+                            physics = Some(phys.clone());
+                        }
+                    }
                     let (res_mesh, res_mat) = self.resolve_source_producer(conn.source_pin, graph);
                     if res_mesh.is_some() {
                         mesh_source = res_mesh;
@@ -205,6 +222,7 @@ impl DomainPayloadStore {
             scale: entity_data.scale,
             mesh_source,
             material,
+            physics,
         })
     }
 

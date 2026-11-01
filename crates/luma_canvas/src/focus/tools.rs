@@ -35,7 +35,35 @@ impl ContextualToolRegistry {
     }
 
     pub fn with_default_toolsets() -> Self {
-        Self::new()
+        let mut reg = Self::new();
+        reg.register_tools(
+            "MeshNode",
+            vec![
+                ContextualTool::new("mesh.translate", "Translate", "Transform", "move"),
+                ContextualTool::new("mesh.rotate", "Rotate", "Transform", "rotate-3d"),
+                ContextualTool::new("mesh.scale", "Scale", "Transform", "maximize-2"),
+                ContextualTool::new("mesh.subdivide", "Subdivide", "Geometry", "grid"),
+                ContextualTool::new("mesh.wireframe", "Wireframe", "Display", "eye"),
+            ],
+        );
+        reg.register_tools(
+            "MaterialNode",
+            vec![
+                ContextualTool::new("mat.color_picker", "Color Picker", "Shader", "palette"),
+                ContextualTool::new("mat.roughness", "Roughness", "Shader", "sliders"),
+                ContextualTool::new("mat.metallic", "Metallic", "Shader", "disc"),
+                ContextualTool::new("mat.emission", "Emission", "Shader", "sun"),
+            ],
+        );
+        reg.register_tools(
+            "PhysicsNode",
+            vec![
+                ContextualTool::new("physics.collider", "Collider Shape", "Physics", "box"),
+                ContextualTool::new("physics.mass", "Mass & Inertia", "Physics", "weight"),
+                ContextualTool::new("physics.gravity", "Gravity & Forces", "Physics", "arrow-down"),
+            ],
+        );
+        reg
     }
 
     pub fn register_tools(&mut self, kind: impl Into<String>, tools: Vec<ContextualTool>) {

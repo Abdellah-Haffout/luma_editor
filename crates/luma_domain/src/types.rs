@@ -70,3 +70,36 @@ impl Default for EntityAssemblerData {
         }
     }
 }
+
+/// Physics simulation body types for rigid bodies.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum PhysicsBodyType {
+    #[default]
+    Dynamic,
+    Static,
+    Kinematic,
+}
+
+/// Domain payload for physical rigid body and collision dynamics.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PhysicsData {
+    pub body_type: PhysicsBodyType,
+    pub mass: f32,
+    pub friction: f32,
+    pub restitution: f32,
+    pub gravity_scale: f32,
+    pub linear_damping: f32,
+}
+
+impl Default for PhysicsData {
+    fn default() -> Self {
+        Self {
+            body_type: PhysicsBodyType::Dynamic,
+            mass: 1.0,
+            friction: 0.5,
+            restitution: 0.7,
+            gravity_scale: 1.0,
+            linear_damping: 0.1,
+        }
+    }
+}
